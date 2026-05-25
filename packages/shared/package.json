@@ -1,0 +1,17 @@
+{
+  "name": "@bolao/shared",
+  "version": "0.1.0",
+  "private": true,
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsc -p tsconfig.json --watch --preserveWatchOutput",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "lint": "echo 'no-op'",
+    "test": "echo 'no-op'"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.3"
+  }
+}

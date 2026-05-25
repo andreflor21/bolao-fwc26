@@ -1,0 +1,31 @@
+{
+  "name": "bolao-copa-2026",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Bolão Copa do Mundo FIFA 2026 — Monorepo (Sprint 0 + 1)",
+  "packageManager": "pnpm@9.0.0",
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev",
+    "lint": "turbo run lint",
+    "test": "turbo run test",
+    "typecheck": "turbo run typecheck",
+    "docker:up": "docker compose up -d",
+    "docker:down": "docker compose down",
+    "docker:logs": "docker compose logs -f",
+    "db:migrate": "pnpm --filter @bolao/api prisma migrate dev",
+    "db:seed": "pnpm --filter @bolao/api prisma db seed",
+    "db:reset": "pnpm --filter @bolao/api prisma migrate reset --force",
+    "db:studio": "pnpm --filter @bolao/api prisma studio"
+  },
+  "devDependencies": {
+    "turbo": "^2.0.6",
+    "typescript": "^5.5.3",
+    "prettier": "^3.3.2",
+    "@types/node": "^20.14.10"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "pnpm": ">=9.0.0"
+  }
+}

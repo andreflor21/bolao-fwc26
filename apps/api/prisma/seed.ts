@@ -1,0 +1,50 @@
+import { PrismaClient } from '@prisma/client';
+import { seedTeams } from './seeds/teams';
+import { seedGroupMatches } from './seeds/matches';
+
+const prisma = new PrismaClient();
+
+const FIFA_WC_2026_ID = 'fifa-wc-2026';
+
+async function main() {
+  console.log('🌱 Seeding Bolão Copa 2026...');
+
+  const competition = await prisma.competition.upsert({
+    where: { id: FIFA_WC_2026_ID },
+    update: {},
+    create: {
+      id: FIFA_WC_2026_ID,
+      name: 'Copa do Mundo FIFA 2026',
+      locksAt: new Date(process.env.COMPETITION_LOCKS_AT ?? '2026-06-11T19:00:00Z'),
+      endsAt: new Date(process.env.COMPETITION_ENDS_AT ?? '2026-07-19T23:59:59Z'),
+      closureStatus: 'open',
+      prizeDistribution: {
+        '1st': 0.45,
+        '2nd': 0.2,
+        '3rd': 0.12,
+        '4th': 0.08,
+        '5th': 0.05,
+        exact_score_king: 0.05,
+        admin: 0.05,
+      },
+    },
+  });
+  console.log(`  ✔ Competition: ${competition.name}`);
+
+  const teamCount = await seedTeams(prisma, competition.id);
+  console.log(`  ✔ Teams: ${teamCount}`);
+
+  const matchCount = await seedGroupMatches(prisma, competition.id);
+  console.log(`  ✔ Group matches: ${matchCount}`);
+
+  console.log('✅ Seed completo');
+}
+
+main()
+  .catch((e) => {
+    console.error('Seed failed:', e);
+    process.exit(1);
+  })
+  .finally(async () => {
+    await prisma.$disconnect();
+  });

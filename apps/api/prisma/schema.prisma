@@ -1,0 +1,292 @@
+// Bolão Copa do Mundo FIFA 2026 — Schema completo do MVP
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  player
+  subscriber
+  admin
+}
+
+enum SubscriptionStatus {
+  pending_payment
+  active
+  refunded
+}
+
+enum ClosureStatus {
+  open
+  locked
+  finalized
+}
+
+enum MatchStage {
+  group
+  r32
+  r16
+  qf
+  sf
+  tp
+  final
+}
+
+enum PrizeCategory {
+  first
+  second
+  third
+  fourth
+  fifth
+  exact_score_king
+  admin
+}
+
+model User {
+  id              String    @id @default(uuid()) @db.Uuid
+  email           String    @unique
+  passwordHash    String    @map("password_hash")
+  name            String
+  role            UserRole  @default(player)
+  googleId        String?   @unique @map("google_id")
+  pixKey          String?   @map("pix_key")
+  emailVerifiedAt DateTime? @map("email_verified_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  subscriptions     Subscription[]
+  ownedSidePools    SidePool[]         @relation("SidePoolOwner")
+  sidePoolMembers   SidePoolMember[]
+  guesses           Guess[]
+  passwordResets    PasswordReset[]
+  refreshTokens     RefreshToken[]
+  bracketPredictions BracketPrediction[]
+  prizePayouts      PrizePayout[]
+
+  @@index([createdAt])
+  @@map("users")
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  tokenHash String   @unique @map("token_hash")
+  expiresAt DateTime @map("expires_at")
+  revokedAt DateTime? @map("revoked_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("refresh_tokens")
+}
+
+model PasswordReset {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  tokenHash String   @unique @map("token_hash")
+  expiresAt DateTime @map("expires_at")
+  usedAt    DateTime? @map("used_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("password_resets")
+}
+
+model Competition {
+  id                String         @id
+  name              String
+  locksAt           DateTime       @map("locks_at")
+  endsAt            DateTime       @map("ends_at")
+  closureStatus     ClosureStatus  @default(open) @map("closure_status")
+  prizePoolCents    Int            @default(0) @map("prize_pool_cents")
+  prizeDistribution Json?          @map("prize_distribution")
+  createdAt         DateTime       @default(now()) @map("created_at")
+
+  teams              Team[]
+  matches            Match[]
+  subscriptions      Subscription[]
+  sidePools          SidePool[]
+  bracketPredictions BracketPrediction[]
+  prizePayouts       PrizePayout[]
+
+  @@map("competitions")
+}
+
+model Team {
+  id            String  @id @default(uuid()) @db.Uuid
+  competitionId String  @map("competition_id")
+  code          String
+  name          String
+  groupLetter   String? @map("group_letter")
+  seededRank    Int     @map("seeded_rank")
+  flagUrl       String? @map("flag_url")
+
+  competition Competition @relation(fields: [competitionId], references: [id], onDelete: Cascade)
+  homeMatches Match[]     @relation("HomeTeam")
+  awayMatches Match[]     @relation("AwayTeam")
+
+  @@unique([competitionId, code])
+  @@index([groupLetter])
+  @@map("teams")
+}
+
+model Match {
+  id                  String     @id @default(uuid()) @db.Uuid
+  competitionId       String     @map("competition_id")
+  stage               MatchStage
+  groupLetter         String?    @map("group_letter")
+  roundNumber         Int?       @map("round_number")
+  kickoffAt           DateTime   @map("kickoff_at")
+  homeTeamId          String?    @map("home_team_id") @db.Uuid
+  awayTeamId          String?    @map("away_team_id") @db.Uuid
+  homeGoalsOfficial   Int?       @map("home_goals_official")
+  awayGoalsOfficial   Int?       @map("away_goals_official")
+  resultLockedAt      DateTime?  @map("result_locked_at")
+  city                String?
+
+  competition Competition @relation(fields: [competitionId], references: [id], onDelete: Cascade)
+  homeTeam    Team?       @relation("HomeTeam", fields: [homeTeamId], references: [id])
+  awayTeam    Team?       @relation("AwayTeam", fields: [awayTeamId], references: [id])
+  guesses     Guess[]
+
+  @@index([competitionId, stage])
+  @@index([kickoffAt])
+  @@map("matches")
+}
+
+model Subscription {
+  id                       String             @id @default(uuid()) @db.Uuid
+  userId                   String             @map("user_id") @db.Uuid
+  competitionId            String             @map("competition_id")
+  status                   SubscriptionStatus @default(pending_payment)
+  amountCents              Int                @default(5000) @map("amount_cents")
+  stripePaymentIntentId    String?            @unique @map("stripe_payment_intent_id")
+  paidAt                   DateTime?          @map("paid_at")
+  refundedAt               DateTime?          @map("refunded_at")
+  refundedAmountCents      Int?               @map("refunded_amount_cents")
+  stripeRefundId           String?            @map("stripe_refund_id")
+  createdAt                DateTime           @default(now()) @map("created_at")
+  updatedAt                DateTime           @updatedAt @map("updated_at")
+
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  competition Competition @relation(fields: [competitionId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, competitionId])
+  @@index([status])
+  @@map("subscriptions")
+}
+
+model SidePool {
+  id            String   @id @default(uuid()) @db.Uuid
+  ownerUserId   String   @map("owner_user_id") @db.Uuid
+  competitionId String   @map("competition_id")
+  name          String
+  description   String?
+  maxMembers    Int      @default(100) @map("max_members")
+  inviteToken   String   @unique @map("invite_token")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  owner       User             @relation("SidePoolOwner", fields: [ownerUserId], references: [id], onDelete: Cascade)
+  competition Competition      @relation(fields: [competitionId], references: [id], onDelete: Cascade)
+  members     SidePoolMember[]
+
+  @@index([ownerUserId])
+  @@index([competitionId])
+  @@map("side_pools")
+}
+
+model SidePoolMember {
+  id         String   @id @default(uuid()) @db.Uuid
+  sidePoolId String   @map("side_pool_id") @db.Uuid
+  userId     String   @map("user_id") @db.Uuid
+  joinedAt   DateTime @default(now()) @map("joined_at")
+
+  sidePool SidePool @relation(fields: [sidePoolId], references: [id], onDelete: Cascade)
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([sidePoolId, userId])
+  @@index([userId])
+  @@map("side_pool_members")
+}
+
+model Guess {
+  id         String   @id @default(uuid()) @db.Uuid
+  userId     String   @map("user_id") @db.Uuid
+  matchId    String   @map("match_id") @db.Uuid
+  homeGoals  Int      @map("home_goals")
+  awayGoals  Int      @map("away_goals")
+  isDerived  Boolean  @default(false) @map("is_derived")
+  submittedAt DateTime? @map("submitted_at")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  match Match @relation(fields: [matchId], references: [id], onDelete: Cascade)
+
+  score GuessScore?
+
+  @@unique([userId, matchId])
+  @@index([userId])
+  @@map("guesses")
+}
+
+model GuessScore {
+  id                  String   @id @default(uuid()) @db.Uuid
+  guessId             String   @unique @map("guess_id") @db.Uuid
+  points              Int
+  ruleApplied         String   @map("rule_applied")
+  computedAt          DateTime @default(now()) @map("computed_at")
+  officialResultHash  String   @map("official_result_hash")
+
+  guess Guess @relation(fields: [guessId], references: [id], onDelete: Cascade)
+
+  @@map("guess_scores")
+}
+
+model BracketPrediction {
+  id            String   @id @default(uuid()) @db.Uuid
+  userId        String   @map("user_id") @db.Uuid
+  competitionId String   @map("competition_id")
+  payload       Json
+  submittedAt   DateTime @default(now()) @map("submitted_at")
+
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  competition Competition @relation(fields: [competitionId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, competitionId])
+  @@map("bracket_predictions")
+}
+
+model PrizePayout {
+  id              String        @id @default(uuid()) @db.Uuid
+  competitionId   String        @map("competition_id")
+  userId          String?       @map("user_id") @db.Uuid
+  category        PrizeCategory
+  amountCents     Int           @map("amount_cents")
+  percentage      Float
+  paidAt          DateTime?     @map("paid_at")
+  paidByAdminId   String?       @map("paid_by_admin_id") @db.Uuid
+  paymentReference String?      @map("payment_reference")
+  createdAt       DateTime      @default(now()) @map("created_at")
+
+  competition Competition @relation(fields: [competitionId], references: [id], onDelete: Cascade)
+  user        User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([competitionId])
+  @@map("prize_payouts")
+}
+
+model ProcessedWebhookEvent {
+  id          String   @id
+  source      String
+  processedAt DateTime @default(now()) @map("processed_at")
+
+  @@map("processed_webhook_events")
+}
