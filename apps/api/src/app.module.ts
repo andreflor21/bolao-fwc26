@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { ScheduleModule } from '@nestjs/schedule';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { APP_GUARD } from '@nestjs/core';
 import { PrismaModule } from './prisma/prisma.module';
@@ -15,6 +16,7 @@ import { PaymentModule } from './payment/payment.module';
 import { RedisModule } from './redis/redis.module';
 import { RankingModule } from './ranking/ranking.module';
 import { PrizeModule } from './prize/prize.module';
+import { NotificationModule } from './notification/notification.module';
 import { HealthController } from './health/health.controller';
 import { validateEnv } from './config/env.validation';
 
@@ -32,6 +34,7 @@ import { validateEnv } from './config/env.validation';
         limit: Number(process.env.THROTTLE_LIMIT ?? 100),
       },
     ]),
+    ScheduleModule.forRoot(),
     PrismaModule,
     RedisModule,
     EmailModule,
@@ -44,6 +47,7 @@ import { validateEnv } from './config/env.validation';
     GuessModule,
     RankingModule,
     PrizeModule,
+    NotificationModule,
     AdminModule,
   ],
   controllers: [HealthController],

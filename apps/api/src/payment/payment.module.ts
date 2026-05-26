@@ -1,6 +1,5 @@
 import { Logger, Module, type Provider } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { ScheduleModule } from '@nestjs/schedule';
 import Stripe from 'stripe';
 import type { StripeApi } from './drivers/stripe-types';
 import { PaymentController } from './payment.controller';
@@ -43,7 +42,6 @@ const paymentDriverProvider: Provider = {
 };
 
 @Module({
-  imports: [ScheduleModule.forRoot()],
   controllers: [PaymentController, WebhookController],
   providers: [PaymentService, ReconciliationCron, paymentDriverProvider],
   exports: [PaymentService, PAYMENT_DRIVER],

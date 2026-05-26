@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { api } from '../lib/api';
 import { useAuth } from '../lib/auth';
+import { PushConsentBanner } from '../components/PushConsentBanner';
 
 type SubscriptionStatus = {
   id?: string;
@@ -23,6 +24,7 @@ export function Dashboard() {
 
   return (
     <div className="space-y-8">
+      <PushConsentBanner />
       <header className="flex items-end justify-between flex-wrap gap-3">
         <div>
           <p className="text-xs font-bold tracking-[0.4em] text-gold-400">SUA CENTRAL</p>

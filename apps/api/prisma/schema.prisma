@@ -66,6 +66,7 @@ model User {
   refreshTokens     RefreshToken[]
   bracketPredictions BracketPrediction[]
   prizePayouts      PrizePayout[]
+  pushSubscriptions PushSubscription[]
 
   @@index([createdAt])
   @@map("users")
@@ -168,6 +169,8 @@ model Subscription {
   status                   SubscriptionStatus @default(pending_payment)
   amountCents              Int                @default(5000) @map("amount_cents")
   stripePaymentIntentId    String?            @unique @map("stripe_payment_intent_id")
+  stripeCheckoutSessionId  String?            @unique @map("stripe_checkout_session_id")
+  checkoutSessionExpiresAt DateTime?          @map("checkout_session_expires_at")
   paidAt                   DateTime?          @map("paid_at")
   refundedAt               DateTime?          @map("refunded_at")
   refundedAmountCents      Int?               @map("refunded_amount_cents")
@@ -281,6 +284,22 @@ model PrizePayout {
 
   @@index([competitionId])
   @@map("prize_payouts")
+}
+
+model PushSubscription {
+  id          String   @id @default(uuid()) @db.Uuid
+  userId      String   @map("user_id") @db.Uuid
+  endpoint    String
+  keysP256dh  String   @map("keys_p256dh")
+  keysAuth    String   @map("keys_auth")
+  userAgent   String?  @map("user_agent")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, endpoint])
+  @@index([userId])
+  @@map("push_subscriptions")
 }
 
 model ProcessedWebhookEvent {

@@ -77,6 +77,26 @@ class EnvVars {
   @IsOptional()
   @IsInt()
   SUBSCRIPTION_AMOUNT_CENTS?: number;
+
+  @IsOptional()
+  @IsString()
+  VAPID_PUBLIC_KEY?: string;
+
+  @IsOptional()
+  @IsString()
+  VAPID_PRIVATE_KEY?: string;
+
+  @IsOptional()
+  @IsString()
+  VAPID_SUBJECT?: string;
+
+  @IsOptional()
+  @IsString()
+  STRIPE_CHECKOUT_METHODS?: string;
+
+  @IsOptional()
+  @IsInt()
+  STRIPE_BOLETO_EXPIRES_AFTER_DAYS?: number;
 }
 
 export function validateEnv(config: Record<string, unknown>): EnvVars {
