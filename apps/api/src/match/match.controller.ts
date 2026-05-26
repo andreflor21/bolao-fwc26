@@ -1,9 +1,13 @@
-import { Controller, Get, UseGuards } from '@nestjs/common';
+import { Controller, Get } from '@nestjs/common';
 import { MatchService } from './match.service';
-import { ActiveSubscriptionGuard } from '../auth/guards/active-subscription.guard';
 
+/**
+ * Match metadata is non-sensitive (FIFA fixture list + official scores
+ * once registered). Authenticated access is enforced by the global
+ * JwtAuthGuard; no subscription is required so admins without a paid
+ * subscription can still consume it.
+ */
 @Controller('matches')
-@UseGuards(ActiveSubscriptionGuard)
 export class MatchController {
   constructor(private readonly match: MatchService) {}
 

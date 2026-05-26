@@ -1,9 +1,10 @@
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../lib/auth';
+import { AdminToggle } from './AdminToggle';
 import { Trophy } from './Trophy';
 
 export function Layout({ children }: { children: React.ReactNode }) {
-  const { user, logout } = useAuth();
+  const { user, logout, isAdmin, adminView } = useAuth();
   const navigate = useNavigate();
 
   return (
@@ -62,6 +63,17 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 >
                   Meus bolões
                 </Link>
+                {isAdmin && adminView && (
+                  <Link
+                    to="/admin"
+                    className="px-3 py-2 rounded-lg text-gold-200 hover:text-gold-100 hover:bg-gold-500/10 transition font-semibold"
+                  >
+                    Admin
+                  </Link>
+                )}
+                <div className="pl-2 ml-1 border-l border-emerald-500/20 flex items-center gap-2">
+                  <AdminToggle />
+                </div>
                 <div className="hidden sm:flex items-center gap-2 pl-3 ml-1 border-l border-emerald-500/20">
                   <div className="h-8 w-8 rounded-full bg-gradient-to-br from-gold-300 to-gold-600 grid place-items-center text-midnight-900 font-bold text-sm shadow-md">
                     {user.name.charAt(0).toUpperCase()}

@@ -14,6 +14,11 @@ import { KnockoutGuesses } from './pages/KnockoutGuesses';
 import { PaymentPix } from './pages/PaymentPix';
 import { Ranking } from './pages/Ranking';
 import { Prizes } from './pages/Prizes';
+import { AdminRoute } from './pages/admin/AdminLayout';
+import { AdminMatches } from './pages/admin/AdminMatches';
+import { AdminPrizes } from './pages/admin/AdminPrizes';
+import { AdminClosure } from './pages/admin/AdminClosure';
+import { AdminReconciliation } from './pages/admin/AdminReconciliation';
 import { useAuth } from './lib/auth';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -104,6 +109,13 @@ export function App() {
             </ProtectedRoute>
           }
         />
+        <Route path="/admin" element={<AdminRoute />}>
+          <Route index element={<Navigate to="matches" replace />} />
+          <Route path="matches" element={<AdminMatches />} />
+          <Route path="prizes" element={<AdminPrizes />} />
+          <Route path="closure" element={<AdminClosure />} />
+          <Route path="reconciliation" element={<AdminReconciliation />} />
+        </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Layout>
