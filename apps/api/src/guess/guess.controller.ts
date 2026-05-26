@@ -14,6 +14,8 @@ import type { AuthenticatedUser } from '../auth/strategies/jwt.strategy';
 import { ActiveSubscriptionGuard } from '../auth/guards/active-subscription.guard';
 import { SaveDraftGuessesBody } from './dto/save-draft.dto';
 import { SaveKnockoutScoresBody } from './dto/save-knockout-scores.dto';
+import { SaveManualTiebreakBody } from './dto/save-manual-tiebreak.dto';
+import type { GroupLetter } from '@bolao/shared';
 
 @Controller('guesses')
 @UseGuards(ActiveSubscriptionGuard)
@@ -60,5 +62,16 @@ export class GuessController {
   @HttpCode(HttpStatus.OK)
   submitKnockout(@CurrentUser() user: AuthenticatedUser) {
     return this.guess.submitKnockoutGuesses(user.id);
+  }
+
+  @Put('manual-tiebreak')
+  @HttpCode(HttpStatus.OK)
+  saveManualTiebreak(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() body: SaveManualTiebreakBody,
+  ) {
+    const order: Partial<Record<GroupLetter, string[]>> = {};
+    for (const item of body.orders) order[item.groupLetter] = item.teamCodes;
+    return this.guess.saveManualTiebreakOrder(user.id, order);
   }
 }

@@ -24,6 +24,8 @@ import type { SaveKnockoutScoresBody } from './dto/save-knockout-scores.dto';
 interface StoredBracketPayload {
   bracket: BracketPreviewDto;
   knockoutScores: Record<string, KnockoutScoreEntryDto>;
+  /** Per-group manual tie-break order set by the user via the resolver UI. */
+  manualTiebreakOrder?: Partial<Record<GroupLetter, string[]>>;
   groupSubmittedAt: string;
   knockoutSubmittedAt: string | null;
 }
@@ -163,12 +165,18 @@ export class GuessService {
       });
     }
 
-    const bracket = this.computeBracket(allMatches, guessByMatchId);
     const existing = await this.loadPayload(userId);
+    const bracket = this.computeBracket(
+      allMatches,
+      guessByMatchId,
+      undefined,
+      existing?.manualTiebreakOrder,
+    );
     const now = new Date();
     const payload: StoredBracketPayload = {
       bracket,
       knockoutScores: existing?.knockoutScores ?? {},
+      manualTiebreakOrder: existing?.manualTiebreakOrder ?? {},
       groupSubmittedAt: now.toISOString(),
       knockoutSubmittedAt: existing?.knockoutSubmittedAt ?? null,
     };
@@ -219,7 +227,12 @@ export class GuessService {
       select: { matchId: true, homeGoals: true, awayGoals: true },
     });
     const guessByMatchId = new Map(userGuesses.map((g) => [g.matchId, g] as const));
-    return this.computeBracket(allMatches, guessByMatchId, payload?.knockoutScores);
+    return this.computeBracket(
+      allMatches,
+      guessByMatchId,
+      payload?.knockoutScores,
+      payload?.manualTiebreakOrder,
+    );
   }
 
   /**
@@ -313,7 +326,11 @@ export class GuessService {
       };
     }
 
-    const refreshedBracket = await this.rebuildBracketFor(userId, next);
+    const refreshedBracket = await this.rebuildBracketFor(
+      userId,
+      next,
+      existing.manualTiebreakOrder,
+    );
     const payload: StoredBracketPayload = {
       ...existing,
       bracket: refreshedBracket,
@@ -335,6 +352,7 @@ export class GuessService {
   private async rebuildBracketFor(
     userId: string,
     knockoutScores: Record<string, KnockoutScoreEntryDto>,
+    manualTiebreakOrder: Partial<Record<GroupLetter, string[]>> | undefined,
   ): Promise<BracketPreviewDto> {
     const allMatches = await this.prisma.match.findMany({
       where: { competitionId: FIFA_WC_2026_ID, stage: 'group' },
@@ -350,7 +368,7 @@ export class GuessService {
       select: { matchId: true, homeGoals: true, awayGoals: true },
     });
     const guessByMatchId = new Map(userGuesses.map((g) => [g.matchId, g] as const));
-    return this.computeBracket(allMatches, guessByMatchId, knockoutScores);
+    return this.computeBracket(allMatches, guessByMatchId, knockoutScores, manualTiebreakOrder);
   }
 
   /**
@@ -399,11 +417,59 @@ export class GuessService {
       return {
         bracket: raw as BracketPreviewDto,
         knockoutScores: {},
+        manualTiebreakOrder: {},
         groupSubmittedAt: new Date(0).toISOString(),
         knockoutSubmittedAt: null,
       };
     }
-    return raw as StoredBracketPayload;
+    const stored = raw as StoredBracketPayload;
+    return { ...stored, manualTiebreakOrder: stored.manualTiebreakOrder ?? {} };
+  }
+
+  /**
+   * Saves the per-group manual tie-break order chosen by the user, then
+   * recomputes the bracket so downstream R32+ slots reflect the new ordering
+   * immediately. Requires group palpites already submitted (the bracket
+   * snapshot must exist).
+   */
+  async saveManualTiebreakOrder(
+    userId: string,
+    order: Partial<Record<GroupLetter, string[]>>,
+  ): Promise<{ bracket: BracketPreviewDto }> {
+    await this.competition.assertOpen();
+
+    const existing = await this.loadPayload(userId);
+    if (!existing) {
+      throw new BadRequestException({
+        code: 'GROUP_NOT_SUBMITTED',
+        message: 'Submit group palpites before saving manual tie-break order',
+      });
+    }
+
+    const merged: Partial<Record<GroupLetter, string[]>> = {
+      ...(existing.manualTiebreakOrder ?? {}),
+    };
+    for (const [letter, teams] of Object.entries(order)) {
+      if (!teams || teams.length === 0) delete merged[letter as GroupLetter];
+      else merged[letter as GroupLetter] = [...teams];
+    }
+
+    const refreshed = await this.rebuildBracketFor(
+      userId,
+      existing.knockoutScores ?? {},
+      merged,
+    );
+    const payload: StoredBracketPayload = {
+      ...existing,
+      bracket: refreshed,
+      manualTiebreakOrder: merged,
+    };
+    await this.prisma.bracketPrediction.update({
+      where: { userId_competitionId: { userId, competitionId: FIFA_WC_2026_ID } },
+      data: { payload: payload as unknown as object },
+    });
+
+    return { bracket: refreshed };
   }
 
   private computeBracket(
@@ -415,6 +481,7 @@ export class GuessService {
     }>,
     guesses: Map<string, { homeGoals: number; awayGoals: number }>,
     knockoutScores?: Record<string, KnockoutScoreEntryDto>,
+    manualTiebreakOrder?: Partial<Record<GroupLetter, string[]>>,
   ): BracketPreviewDto {
     const groupMatches: Array<GroupMatchResult & { groupLetter: GroupLetter }> = [];
     const fifaRanks: FifaRanks = {};
@@ -434,6 +501,6 @@ export class GuessService {
       });
     }
 
-    return buildBracket({ groupMatches, fifaRanks, knockoutScores });
+    return buildBracket({ groupMatches, fifaRanks, knockoutScores, manualTiebreakOrder });
   }
 }

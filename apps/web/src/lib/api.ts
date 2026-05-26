@@ -46,3 +46,28 @@ export async function api<T = unknown>(
 
   return body as T;
 }
+
+/**
+ * Downloads the response body as a Blob, then triggers a browser download
+ * with the given filename. Honours the bearer token like {@link api} so
+ * authenticated endpoints work without juggling localStorage tokens.
+ */
+export async function apiDownload(path: string, filename: string): Promise<void> {
+  const headers = new Headers();
+  if (accessToken) headers.set('Authorization', `Bearer ${accessToken}`);
+
+  const res = await fetch(`${BASE}${path}`, { headers });
+  if (!res.ok) {
+    if (res.status === 401 && onAuthLost) onAuthLost();
+    throw new ApiError(res.status, `Falha ao baixar (${res.status})`);
+  }
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}

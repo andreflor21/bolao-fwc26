@@ -1,9 +1,10 @@
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { api, ApiError } from '../lib/api';
 import { BracketSlot } from '../components/BracketSlot';
+import { ManualTiebreakResolver } from '../components/ManualTiebreakResolver';
 import { flagUrl } from '../lib/flags';
-import type { BracketPreviewDto, KnockoutStage } from '@bolao/shared';
+import type { BracketPreviewDto, GroupLetter, KnockoutStage } from '@bolao/shared';
 
 const STAGE_LABEL: Record<KnockoutStage, string> = {
   r32: 'Rodada de 32',
@@ -17,9 +18,21 @@ const STAGE_LABEL: Record<KnockoutStage, string> = {
 const STAGE_ORDER: KnockoutStage[] = ['r32', 'r16', 'qf', 'sf', 'final', 'tp'];
 
 export function BracketPreview() {
+  const qc = useQueryClient();
   const bracketQuery = useQuery({
     queryKey: ['bracket-preview'],
     queryFn: () => api<BracketPreviewDto>('/guesses/bracket-preview'),
+  });
+
+  const tiebreakMutation = useMutation({
+    mutationFn: (orders: Array<{ groupLetter: GroupLetter; teamCodes: string[] }>) =>
+      api<{ bracket: BracketPreviewDto }>('/guesses/manual-tiebreak', {
+        method: 'PUT',
+        body: JSON.stringify({ orders }),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['bracket-preview'] });
+    },
   });
 
   if (bracketQuery.isLoading) {
@@ -62,6 +75,18 @@ export function BracketPreview() {
           ← Editar palpites
         </Link>
       </header>
+
+      <ManualTiebreakResolver
+        bracket={bracket}
+        saving={tiebreakMutation.isPending}
+        onSave={(orders) => tiebreakMutation.mutate(orders)}
+      />
+
+      {tiebreakMutation.error && (
+        <p className="text-sm text-red-200 bg-red-500/10 border border-red-400/30 rounded-xl p-3">
+          {(tiebreakMutation.error as Error).message}
+        </p>
+      )}
 
       {champion && (
         <section className="card-glow text-center">

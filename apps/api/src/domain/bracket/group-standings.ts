@@ -40,10 +40,7 @@ function pointsOf(a: Aggregates): number {
   return a.won * 3 + a.drawn;
 }
 
-/**
- * Compares two teams using cascade pts → gd → gf, restricted to the
- * provided match subset.
- */
+/** pts → gd → gf within the provided match subset. */
 function compareByAggregate(
   a: string,
   b: string,
@@ -58,54 +55,37 @@ function compareByAggregate(
   return aggB.goalsFor - aggA.goalsFor;
 }
 
-/**
- * Sorts a group of tied teams using the head-to-head sub-loop, then FIFA rank
- * as the final auxiliary tie-break (lower rank = better team).
- *
- * If the entire tied set is the whole group (size 4), head-to-head against
- * each other equals all matches, so it cannot break the tie — we fall back
- * straight to FIFA rank.
- */
-function breakTies(
-  tied: string[],
+/** Overall GD then GF (no pts — entering this stage assumes overall pts are equal). */
+function compareOverallGdGf(
+  a: string,
+  b: string,
   allMatches: GroupMatchResult[],
-  fifaRanks: FifaRanks,
-): string[] {
-  if (tied.length <= 1) return tied;
+): number {
+  const aggA = aggregatesFor(a, allMatches);
+  const aggB = aggregatesFor(b, allMatches);
+  const gdDiff = (aggB.goalsFor - aggB.goalsAgainst) - (aggA.goalsFor - aggA.goalsAgainst);
+  if (gdDiff !== 0) return gdDiff;
+  return aggB.goalsFor - aggA.goalsFor;
+}
 
-  if (tied.length < 4) {
-    const h2hMatches = allMatches.filter(
-      (m) => tied.includes(m.homeTeamCode) && tied.includes(m.awayTeamCode),
-    );
-    const reordered = [...tied].sort((a, b) => compareByAggregate(a, b, h2hMatches));
+function filterH2H(matches: GroupMatchResult[], teams: string[]): GroupMatchResult[] {
+  const set = new Set(teams);
+  return matches.filter((m) => set.has(m.homeTeamCode) && set.has(m.awayTeamCode));
+}
 
-    // Recurse into still-tied sub-groups (compared on h2h subset).
-    const out: string[] = [];
-    let i = 0;
-    while (i < reordered.length) {
-      const head = reordered[i]!;
-      const tail = [head];
-      let j = i + 1;
-      while (
-        j < reordered.length &&
-        compareByAggregate(head, reordered[j]!, h2hMatches) === 0
-      ) {
-        tail.push(reordered[j]!);
-        j += 1;
-      }
-      if (tail.length === 1) {
-        out.push(head);
-      } else {
-        // Final fallback for still-tied subset: FIFA rank.
-        out.push(...sortByFifaRank(tail, fifaRanks));
-      }
-      i = j;
+function partitionByEqual<T>(items: T[], equal: (a: T, b: T) => boolean): T[][] {
+  if (items.length === 0) return [];
+  const out: T[][] = [];
+  let cur: T[] = [items[0]!];
+  for (let i = 1; i < items.length; i++) {
+    if (equal(cur[cur.length - 1]!, items[i]!)) cur.push(items[i]!);
+    else {
+      out.push(cur);
+      cur = [items[i]!];
     }
-    return out;
   }
-
-  // All 4 tied → FIFA rank decides.
-  return sortByFifaRank(tied, fifaRanks);
+  out.push(cur);
+  return out;
 }
 
 function sortByFifaRank(teams: string[], fifaRanks: FifaRanks): string[] {
@@ -113,21 +93,133 @@ function sortByFifaRank(teams: string[], fifaRanks: FifaRanks): string[] {
 }
 
 /**
- * Computes the standings of a single group, ordered from 1st to 4th place,
- * applying the FIFA 2026 tie-break cascade:
+ * Applies the user-supplied manual order to a still-tied subset. Returns
+ * the reordered list only when every team in the subset is present in
+ * `manualOrder`; otherwise returns null so the caller falls back to FIFA.
+ */
+function applyManualOrder(subset: string[], manualOrder: string[] | undefined): string[] | null {
+  if (!manualOrder || manualOrder.length === 0) return null;
+  const indexed = subset.map((t) => ({ t, idx: manualOrder.indexOf(t) }));
+  if (indexed.some((x) => x.idx < 0)) return null;
+  indexed.sort((a, b) => a.idx - b.idx);
+  return indexed.map((x) => x.t);
+}
+
+/**
+ * Splits the still-tied subset using overall GD → overall GF. Any sub-tranche
+ * that remains tied after that is decided by manual order (when the user
+ * provided it covering the subset) or FIFA rank as the deterministic fallback.
+ * Every sub-tranche that needs manual/FIFA is recorded in `unresolved`.
+ */
+function applyOverallThenManual(
+  subset: string[],
+  allMatches: GroupMatchResult[],
+  manualOrder: string[] | undefined,
+  fifaRanks: FifaRanks,
+  unresolved: string[][],
+): string[] {
+  const sorted = [...subset].sort((a, b) => compareOverallGdGf(a, b, allMatches));
+  const tranches = partitionByEqual(
+    sorted,
+    (a, b) => compareOverallGdGf(a, b, allMatches) === 0,
+  );
+  const out: string[] = [];
+  for (const tr of tranches) {
+    if (tr.length === 1) {
+      out.push(tr[0]!);
+      continue;
+    }
+    unresolved.push([...tr]);
+    const manual = applyManualOrder(tr, manualOrder);
+    if (manual) {
+      out.push(...manual);
+    } else {
+      out.push(...sortByFifaRank(tr, fifaRanks));
+    }
+  }
+  return out;
+}
+
+/**
+ * Breaks ties within a subset of teams that share the same overall points,
+ * following the FIFA-style head-to-head-first cascade:
  *
- *   1. Points
- *   2. Goal difference
- *   3. Goals scored
- *   4. Head-to-head (sub-loop with the same cascade among tied teams)
- *   5. FIFA rank (lower is better) as deterministic auxiliary tie-break
- *      (fair play is not simulable from the data we hold).
+ *   1. H2H points (restricted to matches among the tied subset)
+ *   2. H2H goal difference
+ *   3. H2H goals for
+ *   4. Overall goal difference (across all group matches)
+ *   5. Overall goals for
+ *   6. Manual user-supplied order (covering the still-tied subset)
+ *   7. FIFA rank (deterministic last-resort fallback)
+ *
+ * When step 1-3 shrink the tied set but a sub-tranche remains tied at the
+ * same H2H cascade, the sub-tranche is recursed with H2H recomputed on the
+ * smaller subset (since dropping teams changes which matches count as H2H).
+ */
+function breakTies(
+  tied: string[],
+  allMatches: GroupMatchResult[],
+  manualOrder: string[] | undefined,
+  fifaRanks: FifaRanks,
+  unresolved: string[][],
+): string[] {
+  if (tied.length <= 1) return tied;
+
+  // Cascade through H2H pts/gd/gf restricted to the current tied subset.
+  const h2hMatches = filterH2H(allMatches, tied);
+  const sorted = [...tied].sort((a, b) => compareByAggregate(a, b, h2hMatches));
+  const h2hTranches = partitionByEqual(
+    sorted,
+    (a, b) => compareByAggregate(a, b, h2hMatches) === 0,
+  );
+
+  const out: string[] = [];
+  for (const tr of h2hTranches) {
+    if (tr.length === 1) {
+      out.push(tr[0]!);
+      continue;
+    }
+    if (tr.length < tied.length) {
+      // H2H reduced the subset — recurse so H2H recomputes on the smaller set.
+      out.push(...breakTies(tr, allMatches, manualOrder, fifaRanks, unresolved));
+    } else {
+      // H2H couldn't differentiate the whole set — move to overall stats.
+      out.push(...applyOverallThenManual(tr, allMatches, manualOrder, fifaRanks, unresolved));
+    }
+  }
+  return out;
+}
+
+export interface ComputeStandingsResult {
+  standings: GroupStanding[];
+  /**
+   * Subsets of 2+ teams that remained tied even after all automatic criteria
+   * (steps 1-5 of the cascade) were exhausted. These were decided by the
+   * provided manual order, or by FIFA rank as the deterministic fallback when
+   * no manual order covered the subset. The UI uses this to surface a
+   * "resolver empate" widget so the player can pick the order explicitly.
+   */
+  unresolvedTies: string[][];
+}
+
+/**
+ * Computes the standings of a single group, ordered from 1st to 4th place.
+ *
+ * Outer sort uses overall points only (the canonical FIFA group cascade
+ * groups teams by points first, then resolves ties with the H2H sub-loop).
+ * Within each tied-on-points tranche, see {@link breakTies} for the cascade.
+ *
+ * `manualTiebreakOrder` is an optional list of team codes for this group
+ * that the player has supplied (e.g. via the "resolver empate" UI). When
+ * present and covering a still-tied subset, it overrides the FIFA-rank
+ * fallback; FIFA rank is used otherwise.
  */
 export function computeStandings(
   groupLetter: GroupLetter,
   groupMatches: GroupMatchResult[],
   fifaRanks: FifaRanks,
-): GroupStanding[] {
+  manualTiebreakOrder?: string[],
+): ComputeStandingsResult {
   const teamSet = new Set<string>();
   for (const m of groupMatches) {
     teamSet.add(m.homeTeamCode);
@@ -135,28 +227,25 @@ export function computeStandings(
   }
   const teams = [...teamSet];
 
-  // Initial cascade: pts → gd → gf using all group matches.
-  const initial = [...teams].sort((a, b) => compareByAggregate(a, b, groupMatches));
+  // Outer sort: overall points only. Ties on points trigger the H2H cascade.
+  const byPoints = [...teams].sort(
+    (a, b) =>
+      pointsOf(aggregatesFor(b, groupMatches)) - pointsOf(aggregatesFor(a, groupMatches)),
+  );
 
-  // Break ties within identical (pts, gd, gf) tranches.
+  const unresolved: string[][] = [];
   const ordered: string[] = [];
-  let i = 0;
-  while (i < initial.length) {
-    const head = initial[i]!;
-    const tied = [head];
-    let j = i + 1;
-    while (
-      j < initial.length &&
-      compareByAggregate(head, initial[j]!, groupMatches) === 0
-    ) {
-      tied.push(initial[j]!);
-      j += 1;
-    }
-    ordered.push(...breakTies(tied, groupMatches, fifaRanks));
-    i = j;
+  const pointsTranches = partitionByEqual(
+    byPoints,
+    (a, b) =>
+      pointsOf(aggregatesFor(a, groupMatches)) === pointsOf(aggregatesFor(b, groupMatches)),
+  );
+  for (const tranche of pointsTranches) {
+    if (tranche.length === 1) ordered.push(tranche[0]!);
+    else ordered.push(...breakTies(tranche, groupMatches, manualTiebreakOrder, fifaRanks, unresolved));
   }
 
-  return ordered.map((teamCode, idx) => {
+  const standings: GroupStanding[] = ordered.map((teamCode, idx) => {
     const agg = aggregatesFor(teamCode, groupMatches);
     return {
       teamCode,
@@ -173,4 +262,6 @@ export function computeStandings(
       fifaRank: fifaRanks[teamCode] ?? 9999,
     };
   });
+
+  return { standings, unresolvedTies: unresolved };
 }

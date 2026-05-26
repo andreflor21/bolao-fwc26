@@ -3,6 +3,7 @@ import type {
   BracketPreviewDto,
   GroupLetter,
   KnockoutScoreEntryDto,
+  UnresolvedTieDto,
 } from '@bolao/shared';
 import { GROUP_LETTERS } from '@bolao/shared';
 import { computeStandings } from './group-standings';
@@ -25,6 +26,13 @@ export interface BracketEngineInput {
    * Omitted: R16+ slots resolve to null until the player fills R32 scores.
    */
   knockoutScores?: Record<string, KnockoutScoreEntryDto>;
+  /**
+   * Per-group manual tie-break order supplied by the player. Used as a
+   * fallback when the automatic FIFA-style cascade (H2H pts/gd/gf + overall
+   * gd/gf) leaves two or more teams in a group still tied. See
+   * {@link computeStandings} for the exact precedence.
+   */
+  manualTiebreakOrder?: Partial<Record<GroupLetter, string[]>>;
 }
 
 interface ResolvedFixture {
@@ -158,8 +166,9 @@ function resolveSlot(
  * bracket and prompt the user to fill in gaps.
  */
 export function buildBracket(input: BracketEngineInput): BracketPreviewDto {
-  const { groupMatches, fifaRanks, knockoutScores } = input;
+  const { groupMatches, fifaRanks, knockoutScores, manualTiebreakOrder } = input;
   const scores = knockoutScores ?? {};
+  const manual = manualTiebreakOrder ?? {};
 
   const matchesByGroup = new Map<GroupLetter, GroupMatchResult[]>();
   for (const m of groupMatches) {
@@ -175,12 +184,23 @@ export function buildBracket(input: BracketEngineInput): BracketPreviewDto {
 
   const standingsByGroup = new Map<GroupLetter, GroupStanding[]>();
   const groupsForDto: Partial<Record<GroupLetter, GroupStanding[]>> = {};
+  const unresolvedTies: UnresolvedTieDto[] = [];
   for (const letter of GROUP_LETTERS) {
     const matches = matchesByGroup.get(letter) ?? [];
     if (matches.length === 0) continue;
-    const standings = computeStandings(letter, matches, fifaRanks);
-    standingsByGroup.set(letter, standings);
-    groupsForDto[letter] = standings;
+    const result = computeStandings(letter, matches, fifaRanks, manual[letter]);
+    standingsByGroup.set(letter, result.standings);
+    groupsForDto[letter] = result.standings;
+    for (const subset of result.unresolvedTies) {
+      const positions = result.standings
+        .filter((s) => subset.includes(s.teamCode))
+        .map((s) => s.position);
+      unresolvedTies.push({
+        groupLetter: letter,
+        teamCodes: subset,
+        positions,
+      });
+    }
   }
 
   const thirds: GroupStanding[] = [];
@@ -269,5 +289,6 @@ export function buildBracket(input: BracketEngineInput): BracketPreviewDto {
       bestThirdRank: t.bestThirdRank,
     })),
     fixtures,
+    unresolvedTies,
   };
 }

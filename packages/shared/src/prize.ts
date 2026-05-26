@@ -69,3 +69,52 @@ export interface FinalPrizePayoutDto {
   /** Original distribution percentage (not adjusted for ties). */
   percentage: number;
 }
+
+/**
+ * Persisted payout row from the closure snapshot. Used by /admin/prizes
+ * to render the payout table (and the CSV export). userInfo is null for
+ * the admin slot (no recipient user).
+ */
+export interface AdminPrizePayoutDto {
+  id: string;
+  category: PrizeCategory;
+  categoryLabel: string;
+  /** Position used for sorting/displaying. 1-5 for positional, 6 for exact-score-king, 7 for admin. */
+  displayPosition: number;
+  amountCents: number;
+  percentage: number;
+  user: {
+    id: string;
+    name: string;
+    email: string;
+    pixKey: string | null;
+  } | null;
+  paidAt: string | null;
+  paidByAdminId: string | null;
+  paymentReference: string | null;
+}
+
+export interface ClosureSnapshotDto {
+  competitionId: string;
+  closureStatus: 'open' | 'locked' | 'finalized';
+  finalizedAt: string | null;
+  totalSubscribers: number;
+  poolTotalCents: number;
+  totalDistributedCents: number;
+  payouts: AdminPrizePayoutDto[];
+}
+
+export interface ClosurePrecheckDto {
+  competitionId: string;
+  closureStatus: 'open' | 'locked' | 'finalized';
+  groupMatchesTotal: number;
+  groupMatchesWithResult: number;
+  knockoutMatchesTotal: number;
+  knockoutMatchesWithResult: number;
+  /** True when every group-stage match has an official result. */
+  groupComplete: boolean;
+  /** True when every knockout match has an official result. */
+  knockoutComplete: boolean;
+  totalSubscribers: number;
+  poolTotalCents: number;
+}
