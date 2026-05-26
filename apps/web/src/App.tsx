@@ -8,6 +8,11 @@ import { ResetPassword } from './pages/ResetPassword';
 import { Dashboard } from './pages/Dashboard';
 import { SidePools } from './pages/SidePools';
 import { JoinSidePool } from './pages/JoinSidePool';
+import { Guesses } from './pages/Guesses';
+import { BracketPreview } from './pages/BracketPreview';
+import { PaymentPix } from './pages/PaymentPix';
+import { Ranking } from './pages/Ranking';
+import { Prizes } from './pages/Prizes';
 import { useAuth } from './lib/auth';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -47,6 +52,46 @@ export function App() {
           element={
             <ProtectedRoute>
               <JoinSidePool />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/guesses"
+          element={
+            <ProtectedRoute>
+              <Guesses />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/bracket"
+          element={
+            <ProtectedRoute>
+              <BracketPreview />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/pay"
+          element={
+            <ProtectedRoute>
+              <PaymentPix />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/ranking"
+          element={
+            <ProtectedRoute>
+              <Ranking />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/prizes"
+          element={
+            <ProtectedRoute>
+              <Prizes />
             </ProtectedRoute>
           }
         />

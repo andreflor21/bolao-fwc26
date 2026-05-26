@@ -27,6 +27,30 @@ export function Layout({ children }: { children: React.ReactNode }) {
                   Dashboard
                 </Link>
                 <Link
+                  to="/guesses"
+                  className="px-3 py-2 rounded-lg text-emerald-100/90 hover:text-white hover:bg-emerald-500/10 transition"
+                >
+                  Palpites
+                </Link>
+                <Link
+                  to="/bracket"
+                  className="px-3 py-2 rounded-lg text-emerald-100/90 hover:text-white hover:bg-emerald-500/10 transition"
+                >
+                  Chaveamento
+                </Link>
+                <Link
+                  to="/ranking"
+                  className="px-3 py-2 rounded-lg text-emerald-100/90 hover:text-white hover:bg-emerald-500/10 transition"
+                >
+                  Ranking
+                </Link>
+                <Link
+                  to="/prizes"
+                  className="px-3 py-2 rounded-lg text-emerald-100/90 hover:text-white hover:bg-emerald-500/10 transition"
+                >
+                  Prêmios
+                </Link>
+                <Link
                   to="/side-pools"
                   className="px-3 py-2 rounded-lg text-emerald-100/90 hover:text-white hover:bg-emerald-500/10 transition"
                 >

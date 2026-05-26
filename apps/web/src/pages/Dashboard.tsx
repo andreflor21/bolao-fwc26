@@ -1,4 +1,4 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { api } from '../lib/api';
 import { useAuth } from '../lib/auth';
@@ -12,21 +12,10 @@ type SubscriptionStatus = {
 
 export function Dashboard() {
   const { user } = useAuth();
-  const qc = useQueryClient();
   const { data, isLoading } = useQuery({
     queryKey: ['subscription-status'],
     queryFn: () => api<SubscriptionStatus>('/subscription/status'),
   });
-
-  async function startSubscription() {
-    await api('/subscription', { method: 'POST' });
-    await qc.invalidateQueries({ queryKey: ['subscription-status'] });
-  }
-
-  async function mockConfirm() {
-    await api('/subscription/mock-confirm', { method: 'POST' });
-    await qc.invalidateQueries({ queryKey: ['subscription-status'] });
-  }
 
   if (isLoading) return <p className="text-emerald-200/70">Carregando...</p>;
 
@@ -59,20 +48,19 @@ export function Dashboard() {
               <strong className="text-gold-300">R$ 50</strong> via Pix e libera palpites no Geral + criação
               ilimitada de bolões paralelos.
             </p>
-            <button onClick={startSubscription} className="btn-gold">
+            <Link to="/pay" className="btn-gold inline-block">
               Quero me inscrever →
-            </button>
+            </Link>
           </div>
         )}
         {status === 'pending_payment' && (
           <div className="mt-3 space-y-4">
             <p className="text-sm text-amber-200 bg-amber-500/10 border border-amber-500/30 rounded-xl p-4">
-              ⏳ Sua inscrição está aguardando pagamento. (No MVP atual o Stripe está mockado — clique
-              abaixo para simular a confirmação.)
+              ⏳ Sua inscrição está aguardando pagamento. Volte para a tela do Pix se ainda não pagou.
             </p>
-            <button onClick={mockConfirm} className="btn-primary">
-              Simular pagamento confirmado (dev)
-            </button>
+            <Link to="/pay" className="btn-gold inline-block">
+              Continuar pagamento →
+            </Link>
           </div>
         )}
         {status === 'active' && (
@@ -81,12 +69,21 @@ export function Dashboard() {
               ✅ Inscrição ativa! Você já pode submeter palpites e criar bolões paralelos.
             </p>
             <div className="flex flex-wrap gap-2">
-              <Link to="/side-pools" className="btn-primary">
-                Meus bolões paralelos
+              <Link to="/guesses" className="btn-gold">
+                Palpitar nos 72 jogos →
               </Link>
-              <button className="btn-secondary opacity-50 cursor-not-allowed" disabled>
-                Submeter palpites (Sprint 2)
-              </button>
+              <Link to="/bracket" className="btn-secondary">
+                Chaveamento previsto
+              </Link>
+              <Link to="/ranking" className="btn-secondary">
+                Ranking
+              </Link>
+              <Link to="/prizes" className="btn-secondary">
+                Prêmios
+              </Link>
+              <Link to="/side-pools" className="btn-secondary">
+                Bolões paralelos
+              </Link>
             </div>
           </div>
         )}

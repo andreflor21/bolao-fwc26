@@ -7,10 +7,12 @@ import cookie from '@fastify/cookie';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
+  // `rawBody: true` makes Nest expose req.rawBody (Buffer) on every request,
+  // which the Stripe webhook controller uses for HMAC signature verification.
   const app = await NestFactory.create<NestFastifyApplication>(
     AppModule,
     new FastifyAdapter({ logger: false, trustProxy: true }),
-    { bufferLogs: true },
+    { bufferLogs: true, rawBody: true },
   );
 
   await app.register(helmet, {

@@ -5,3 +5,6 @@ export * from './prize';
 export * from './scoring';
 export * from './side-pool';
 export * from './auth';
+export * from './bracket';
+export * from './guess';
+export * from './ranking';

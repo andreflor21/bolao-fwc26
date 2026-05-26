@@ -12,10 +12,13 @@ export interface MatchDto {
   id: string;
   stage: MatchStage;
   groupLetter: GroupLetter | null;
+  roundNumber: number | null;
   kickoffAt: string;
   city: string | null;
   homeTeamCode: string | null;
   awayTeamCode: string | null;
+  homeTeamName: string | null;
+  awayTeamName: string | null;
   homeGoalsOfficial: number | null;
   awayGoalsOfficial: number | null;
 }
