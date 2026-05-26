@@ -9,14 +9,24 @@ import { CompetitionService } from '../competition/competition.service';
 import {
   FIFA_WC_2026_ID,
   GROUP_STAGE_MATCH_COUNT,
-  type GuessDto,
-  type MyGuessesDto,
   type BracketPreviewDto,
   type GroupLetter,
+  type GuessDto,
+  type KnockoutScoreEntryDto,
+  type MyGuessesDto,
+  type MyKnockoutGuessesDto,
 } from '@bolao/shared';
 import { buildBracket } from '../domain/bracket/bracket-engine';
 import type { FifaRanks, GroupMatchResult } from '../domain/bracket/types';
 import type { SaveDraftGuessesBody } from './dto/save-draft.dto';
+import type { SaveKnockoutScoresBody } from './dto/save-knockout-scores.dto';
+
+interface StoredBracketPayload {
+  bracket: BracketPreviewDto;
+  knockoutScores: Record<string, KnockoutScoreEntryDto>;
+  groupSubmittedAt: string;
+  knockoutSubmittedAt: string | null;
+}
 
 @Injectable()
 export class GuessService {
@@ -115,10 +125,11 @@ export class GuessService {
   }
 
   /**
-   * Finalises the user's submission. Requires all 72 group-stage matches to
-   * have a guess. Runs the BracketEngine and persists a snapshot of the
-   * derived knockout bracket. Idempotent: a second call refreshes the
-   * snapshot using whatever values are currently in `guesses`.
+   * Finalises the user's group-stage submission. Requires all 72 group-stage
+   * matches to have a guess. Runs the BracketEngine and persists a snapshot
+   * of the derived knockout bracket. Idempotent: a second call refreshes
+   * the snapshot using whatever values are currently in `guesses` while
+   * PRESERVING any knockout score predictions already saved.
    */
   async submit(userId: string): Promise<{ submittedAt: string; matches: number }> {
     await this.competition.assertOpen();
@@ -153,7 +164,14 @@ export class GuessService {
     }
 
     const bracket = this.computeBracket(allMatches, guessByMatchId);
+    const existing = await this.loadPayload(userId);
     const now = new Date();
+    const payload: StoredBracketPayload = {
+      bracket,
+      knockoutScores: existing?.knockoutScores ?? {},
+      groupSubmittedAt: now.toISOString(),
+      knockoutSubmittedAt: existing?.knockoutSubmittedAt ?? null,
+    };
 
     await this.prisma.$transaction([
       this.prisma.guess.updateMany({
@@ -165,11 +183,11 @@ export class GuessService {
         create: {
           userId,
           competitionId: FIFA_WC_2026_ID,
-          payload: bracket as unknown as object,
+          payload: payload as unknown as object,
           submittedAt: now,
         },
         update: {
-          payload: bracket as unknown as object,
+          payload: payload as unknown as object,
           submittedAt: now,
         },
       }),
@@ -180,9 +198,144 @@ export class GuessService {
 
   /**
    * Returns the current bracket preview based on whatever guesses exist
-   * (draft or submitted). Useful for live UI while user is still editing.
+   * (draft or submitted), with R16+ propagated using any saved knockout
+   * scores. Useful for live UI while user is still editing.
    */
   async getBracketPreview(userId: string): Promise<BracketPreviewDto> {
+    const [allMatches, payload] = await Promise.all([
+      this.prisma.match.findMany({
+        where: { competitionId: FIFA_WC_2026_ID, stage: 'group' },
+        select: {
+          id: true,
+          groupLetter: true,
+          homeTeam: { select: { code: true, seededRank: true } },
+          awayTeam: { select: { code: true, seededRank: true } },
+        },
+      }),
+      this.loadPayload(userId),
+    ]);
+    const userGuesses = await this.prisma.guess.findMany({
+      where: { userId, matchId: { in: allMatches.map((m) => m.id) } },
+      select: { matchId: true, homeGoals: true, awayGoals: true },
+    });
+    const guessByMatchId = new Map(userGuesses.map((g) => [g.matchId, g] as const));
+    return this.computeBracket(allMatches, guessByMatchId, payload?.knockoutScores);
+  }
+
+  /**
+   * Returns the user's saved KO score predictions + the fixtures (with
+   * predicted team codes) needed to render the input UI. Requires group
+   * palpites to be submitted — otherwise the bracket structure isn't
+   * finalised and KO predictions don't make sense.
+   */
+  async getMyKnockoutGuesses(userId: string): Promise<MyKnockoutGuessesDto> {
+    const [payload, locksAt] = await Promise.all([
+      this.loadPayload(userId),
+      this.competition.getKnockoutLockAt(),
+    ]);
+
+    const now = new Date();
+    if (!payload) {
+      return {
+        fixtures: [],
+        scores: {},
+        submittedAt: null,
+        isOpen: locksAt > now,
+        locksAt: locksAt.toISOString(),
+        groupSubmitted: false,
+      };
+    }
+
+    return {
+      fixtures: payload.bracket.fixtures,
+      scores: payload.knockoutScores ?? {},
+      submittedAt: payload.knockoutSubmittedAt,
+      isOpen: locksAt > now,
+      locksAt: locksAt.toISOString(),
+      groupSubmitted: true,
+    };
+  }
+
+  /**
+   * Upserts knockout score predictions. Validates that group palpites are
+   * submitted (so the bracket exists) and that the KO lock has not passed.
+   * Rebuilds the bracket on every save so downstream R16+ slots reflect the
+   * latest user predictions.
+   */
+  async saveKnockoutScores(
+    userId: string,
+    body: SaveKnockoutScoresBody,
+  ): Promise<{ saved: number; bracket: BracketPreviewDto }> {
+    await this.competition.assertKnockoutOpen();
+
+    const existing = await this.loadPayload(userId);
+    if (!existing) {
+      throw new BadRequestException({
+        code: 'GROUP_NOT_SUBMITTED',
+        message: 'Submit group palpites before saving knockout scores',
+      });
+    }
+
+    const fixtureIndex = new Map(existing.bracket.fixtures.map((f) => [f.id, f] as const));
+    const invalid = body.scores.filter((s) => !fixtureIndex.has(s.fixtureId));
+    if (invalid.length > 0) {
+      throw new BadRequestException({
+        code: 'INVALID_FIXTURE_IDS',
+        message: `Unknown fixture IDs: ${invalid.map((s) => s.fixtureId).slice(0, 5).join(', ')}`,
+      });
+    }
+
+    // Validate advancesTeamCode when score is a draw — must be one of the
+    // two teams currently resolved for the fixture (could still be null on
+    // higher rounds whose chain hasn't filled in yet — in which case any
+    // string is accepted defensively, but won't propagate).
+    for (const s of body.scores) {
+      if (s.homeGoals === s.awayGoals && s.advancesTeamCode) {
+        const f = fixtureIndex.get(s.fixtureId)!;
+        const candidates = [f.topTeamCode, f.bottomTeamCode].filter(
+          (c): c is string => c !== null,
+        );
+        if (candidates.length === 2 && !candidates.includes(s.advancesTeamCode)) {
+          throw new BadRequestException({
+            code: 'INVALID_ADVANCES_TEAM',
+            message: `advancesTeamCode for ${s.fixtureId} must be one of ${candidates.join(', ')}`,
+          });
+        }
+      }
+    }
+
+    const next: Record<string, KnockoutScoreEntryDto> = { ...(existing.knockoutScores ?? {}) };
+    for (const s of body.scores) {
+      next[s.fixtureId] = {
+        homeGoals: s.homeGoals,
+        awayGoals: s.awayGoals,
+        advancesTeamCode: s.advancesTeamCode ?? null,
+      };
+    }
+
+    const refreshedBracket = await this.rebuildBracketFor(userId, next);
+    const payload: StoredBracketPayload = {
+      ...existing,
+      bracket: refreshedBracket,
+      knockoutScores: next,
+    };
+    await this.prisma.bracketPrediction.update({
+      where: { userId_competitionId: { userId, competitionId: FIFA_WC_2026_ID } },
+      data: { payload: payload as unknown as object },
+    });
+
+    return { saved: body.scores.length, bracket: refreshedBracket };
+  }
+
+  /**
+   * Recomputes the bracket using the user's current group palpites + the
+   * provided KO scores. Used by saveKnockoutScores so the response reflects
+   * the propagated R16+ teams immediately.
+   */
+  private async rebuildBracketFor(
+    userId: string,
+    knockoutScores: Record<string, KnockoutScoreEntryDto>,
+  ): Promise<BracketPreviewDto> {
     const allMatches = await this.prisma.match.findMany({
       where: { competitionId: FIFA_WC_2026_ID, stage: 'group' },
       select: {
@@ -197,7 +350,60 @@ export class GuessService {
       select: { matchId: true, homeGoals: true, awayGoals: true },
     });
     const guessByMatchId = new Map(userGuesses.map((g) => [g.matchId, g] as const));
-    return this.computeBracket(allMatches, guessByMatchId);
+    return this.computeBracket(allMatches, guessByMatchId, knockoutScores);
+  }
+
+  /**
+   * Marks the knockout submission as final. Idempotent: re-submitting
+   * refreshes the timestamp.
+   */
+  async submitKnockoutGuesses(
+    userId: string,
+  ): Promise<{ submittedAt: string; scored: number }> {
+    await this.competition.assertKnockoutOpen();
+
+    const existing = await this.loadPayload(userId);
+    if (!existing) {
+      throw new BadRequestException({
+        code: 'GROUP_NOT_SUBMITTED',
+        message: 'Submit group palpites before submitting knockout scores',
+      });
+    }
+
+    const now = new Date();
+    const payload: StoredBracketPayload = {
+      ...existing,
+      knockoutSubmittedAt: now.toISOString(),
+    };
+    await this.prisma.bracketPrediction.update({
+      where: { userId_competitionId: { userId, competitionId: FIFA_WC_2026_ID } },
+      data: { payload: payload as unknown as object },
+    });
+
+    return {
+      submittedAt: now.toISOString(),
+      scored: Object.keys(existing.knockoutScores ?? {}).length,
+    };
+  }
+
+  private async loadPayload(userId: string): Promise<StoredBracketPayload | null> {
+    const row = await this.prisma.bracketPrediction.findUnique({
+      where: { userId_competitionId: { userId, competitionId: FIFA_WC_2026_ID } },
+      select: { payload: true },
+    });
+    if (!row) return null;
+    const raw = row.payload as unknown;
+    // Legacy payloads (pre-KO) stored the BracketPreviewDto directly without
+    // the wrapper. Detect and upgrade in-flight without persisting.
+    if (raw && typeof raw === 'object' && 'fixtures' in raw && !('bracket' in raw)) {
+      return {
+        bracket: raw as BracketPreviewDto,
+        knockoutScores: {},
+        groupSubmittedAt: new Date(0).toISOString(),
+        knockoutSubmittedAt: null,
+      };
+    }
+    return raw as StoredBracketPayload;
   }
 
   private computeBracket(
@@ -208,6 +414,7 @@ export class GuessService {
       awayTeam: { code: string; seededRank: number } | null;
     }>,
     guesses: Map<string, { homeGoals: number; awayGoals: number }>,
+    knockoutScores?: Record<string, KnockoutScoreEntryDto>,
   ): BracketPreviewDto {
     const groupMatches: Array<GroupMatchResult & { groupLetter: GroupLetter }> = [];
     const fifaRanks: FifaRanks = {};
@@ -227,6 +434,6 @@ export class GuessService {
       });
     }
 
-    return buildBracket({ groupMatches, fifaRanks });
+    return buildBracket({ groupMatches, fifaRanks, knockoutScores });
   }
 }

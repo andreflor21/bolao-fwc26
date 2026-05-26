@@ -1,13 +1,13 @@
-import { buildBracket } from './bracket-engine';
-import { GROUP_LETTERS, type GroupLetter } from '@bolao/shared';
+import { buildBracket, assignThirdsToSlots } from './bracket-engine';
+import { GROUP_LETTERS, type GroupLetter, type KnockoutScoreEntryDto } from '@bolao/shared';
+import { R32_FIXTURES } from './fifa-2026-bracket-map';
 import type { GroupMatchResult } from './types';
+import type { ThirdPlaceSlot } from './best-third-places';
 
-/** Build the 4 teams of a group with deterministic codes. */
 function groupTeams(letter: GroupLetter): [string, string, string, string] {
   return [`${letter}1`, `${letter}2`, `${letter}3`, `${letter}4`];
 }
 
-/** Build 6 round-robin matches for one group with given score pairs. */
 function groupRound(
   letter: GroupLetter,
   scores: [number, number][],
@@ -25,7 +25,6 @@ function groupRound(
   }));
 }
 
-/** Mulberry32 PRNG — deterministic seeded random. */
 function rng(seed: number) {
   let s = seed >>> 0;
   return () => {
@@ -55,79 +54,53 @@ function buildFifaRanks(): Record<string, number> {
   return ranks;
 }
 
-describe('buildBracket', () => {
-  it('produces a valid 32-fixture knockout bracket from full group results', () => {
+const FULL_GROUP_RESULTS = (() =>
+  GROUP_LETTERS.flatMap((g) =>
+    groupRound(g, [[2, 1], [3, 0], [1, 0], [1, 1], [0, 0], [2, 2]]),
+  ))();
+
+describe('buildBracket — R32 from group results', () => {
+  it('produces 16 R32 fixtures with two resolved teams each', () => {
     const ranks = buildFifaRanks();
-    const allMatches = GROUP_LETTERS.flatMap((g) =>
-      groupRound(g, [[2, 1], [3, 0], [1, 0], [1, 1], [0, 0], [2, 2]]),
-    );
-    const bracket = buildBracket({ groupMatches: allMatches, fifaRanks: ranks });
+    const bracket = buildBracket({ groupMatches: FULL_GROUP_RESULTS, fifaRanks: ranks });
 
-    // All 12 groups present, 4 entries each.
-    for (const g of GROUP_LETTERS) {
-      expect(bracket.groups[g]).toHaveLength(4);
-    }
-
-    // 8 best thirds.
+    for (const g of GROUP_LETTERS) expect(bracket.groups[g]).toHaveLength(4);
     expect(bracket.bestThirds).toHaveLength(8);
-    expect(bracket.bestThirds.map((b) => b.bestThirdRank)).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
 
-    // Knockout topology: 16 R32 + 8 R16 + 4 QF + 2 SF + Final + 3rd-place = 32.
-    expect(bracket.fixtures).toHaveLength(32);
-    const stageCounts = bracket.fixtures.reduce<Record<string, number>>((acc, f) => {
-      acc[f.stage] = (acc[f.stage] ?? 0) + 1;
-      return acc;
-    }, {});
-    expect(stageCounts).toEqual({ r32: 16, r16: 8, qf: 4, sf: 2, final: 1, tp: 1 });
-
-    // Every R32 slot resolves to a non-null team code.
     const r32 = bracket.fixtures.filter((f) => f.stage === 'r32');
+    expect(r32).toHaveLength(16);
     for (const f of r32) {
       expect(f.topTeamCode).not.toBeNull();
       expect(f.bottomTeamCode).not.toBeNull();
-      expect(f.predictedWinnerCode).not.toBeNull();
     }
-
-    // Final has a champion.
-    const final = bracket.fixtures.find((f) => f.id === 'FINAL');
-    expect(final?.predictedWinnerCode).not.toBeNull();
-    expect(final?.predictedLoserCode).not.toBeNull();
-
-    // 3rd-place match has two teams.
-    const tp = bracket.fixtures.find((f) => f.id === 'TP');
-    expect(tp?.topTeamCode).not.toBeNull();
-    expect(tp?.bottomTeamCode).not.toBeNull();
-    expect(tp?.predictedWinnerCode).not.toBeNull();
   });
 
   it('exactly 32 distinct teams enter R32', () => {
     const ranks = buildFifaRanks();
-    const allMatches = GROUP_LETTERS.flatMap((g) =>
-      groupRound(g, [[2, 1], [3, 0], [1, 0], [1, 1], [0, 0], [2, 2]]),
-    );
-    const bracket = buildBracket({ groupMatches: allMatches, fifaRanks: ranks });
-    const r32 = bracket.fixtures.filter((f) => f.stage === 'r32');
+    const bracket = buildBracket({ groupMatches: FULL_GROUP_RESULTS, fifaRanks: ranks });
     const teams = new Set<string>();
-    for (const f of r32) {
+    for (const f of bracket.fixtures.filter((f) => f.stage === 'r32')) {
       teams.add(f.topTeamCode!);
       teams.add(f.bottomTeamCode!);
     }
     expect(teams.size).toBe(32);
   });
 
-  it('returns partial bracket gracefully when groups are incomplete', () => {
+  it('every best-third slot receives a team from its allowedGroups', () => {
     const ranks = buildFifaRanks();
-    // Only 6 of 12 groups have results.
-    const partial = (['A','B','C','D','E','F'] as GroupLetter[]).flatMap((g) =>
-      groupRound(g, [[1, 0], [2, 0], [1, 0], [0, 0], [1, 1], [2, 2]]),
-    );
-    const bracket = buildBracket({ groupMatches: partial, fifaRanks: ranks });
-    expect(Object.keys(bracket.groups)).toHaveLength(6);
-    expect(bracket.bestThirds).toHaveLength(0); // fewer than 8 thirds available
-    // R32 still has 16 fixtures but with null slots where data is missing.
-    expect(bracket.fixtures.filter((f) => f.stage === 'r32')).toHaveLength(16);
-    const final = bracket.fixtures.find((f) => f.id === 'FINAL');
-    expect(final?.predictedWinnerCode).toBeNull();
+    const bracket = buildBracket({ groupMatches: FULL_GROUP_RESULTS, fifaRanks: ranks });
+
+    for (const tpl of R32_FIXTURES) {
+      const f = bracket.fixtures.find((x) => x.id === tpl.id)!;
+      if (tpl.topSlot.kind === 'BEST_THIRD_FROM') {
+        const group = f.topTeamCode!.charAt(0) as GroupLetter;
+        expect(tpl.topSlot.allowedGroups).toContain(group);
+      }
+      if (tpl.bottomSlot.kind === 'BEST_THIRD_FROM') {
+        const group = f.bottomTeamCode!.charAt(0) as GroupLetter;
+        expect(tpl.bottomSlot.allowedGroups).toContain(group);
+      }
+    }
   });
 
   it('1000 random tournaments always produce a valid 32-team R32', () => {
@@ -136,7 +109,6 @@ describe('buildBracket', () => {
       const rand = rng(seed);
       const allMatches = GROUP_LETTERS.flatMap((g) => groupRound(g, randomScores(rand)));
       const bracket = buildBracket({ groupMatches: allMatches, fifaRanks: ranks });
-
       const r32 = bracket.fixtures.filter((f) => f.stage === 'r32');
       expect(r32).toHaveLength(16);
       const teams = new Set<string>();
@@ -147,19 +119,212 @@ describe('buildBracket', () => {
         teams.add(f.bottomTeamCode!);
       }
       expect(teams.size).toBe(32);
-
-      const final = bracket.fixtures.find((f) => f.id === 'FINAL');
-      expect(final?.predictedWinnerCode).not.toBeNull();
     }
   });
 
-  it('predicted winner is deterministic — re-running yields identical output', () => {
+  it('without knockout scores, R32 has teams but no predicted winners', () => {
     const ranks = buildFifaRanks();
-    const allMatches = GROUP_LETTERS.flatMap((g) =>
-      groupRound(g, [[1, 2], [0, 3], [2, 0], [1, 1], [0, 1], [3, 1]]),
+    const bracket = buildBracket({ groupMatches: FULL_GROUP_RESULTS, fifaRanks: ranks });
+
+    const r32 = bracket.fixtures.filter((f) => f.stage === 'r32');
+    for (const f of r32) {
+      expect(f.predictedWinnerCode).toBeNull();
+      expect(f.predictedLoserCode).toBeNull();
+    }
+
+    // R16+ slots are entirely null (no chain upstream).
+    const r16 = bracket.fixtures.filter((f) => f.stage === 'r16');
+    for (const f of r16) {
+      expect(f.topTeamCode).toBeNull();
+      expect(f.bottomTeamCode).toBeNull();
+    }
+    const final = bracket.fixtures.find((f) => f.id === 'F-104');
+    expect(final?.topTeamCode).toBeNull();
+  });
+
+  it('returns partial bracket gracefully when groups are incomplete', () => {
+    const ranks = buildFifaRanks();
+    const partial = (['A', 'B', 'C', 'D', 'E', 'F'] as GroupLetter[]).flatMap((g) =>
+      groupRound(g, [[1, 0], [2, 0], [1, 0], [0, 0], [1, 1], [2, 2]]),
     );
-    const a = buildBracket({ groupMatches: allMatches, fifaRanks: ranks });
-    const b = buildBracket({ groupMatches: allMatches, fifaRanks: ranks });
+    const bracket = buildBracket({ groupMatches: partial, fifaRanks: ranks });
+    expect(Object.keys(bracket.groups)).toHaveLength(6);
+    expect(bracket.bestThirds).toHaveLength(0);
+    expect(bracket.fixtures.filter((f) => f.stage === 'r32')).toHaveLength(16);
+  });
+});
+
+describe('buildBracket — R16+ propagation via knockoutScores', () => {
+  function topTeams(): Map<string, string> {
+    const ranks = buildFifaRanks();
+    const bracket = buildBracket({ groupMatches: FULL_GROUP_RESULTS, fifaRanks: ranks });
+    const map = new Map<string, string>();
+    for (const f of bracket.fixtures.filter((f) => f.stage === 'r32')) {
+      map.set(f.id, f.topTeamCode!);
+    }
+    return map;
+  }
+
+  it('top wins all R32 → R16 slots populated by R32 top teams', () => {
+    const ranks = buildFifaRanks();
+    const knockoutScores: Record<string, KnockoutScoreEntryDto> = {};
+    for (const f of R32_FIXTURES) {
+      knockoutScores[f.id] = { homeGoals: 2, awayGoals: 0 };
+    }
+    const bracket = buildBracket({
+      groupMatches: FULL_GROUP_RESULTS,
+      fifaRanks: ranks,
+      knockoutScores,
+    });
+    const tops = topTeams();
+    for (const f of bracket.fixtures.filter((f) => f.stage === 'r32')) {
+      expect(f.predictedWinnerCode).toBe(tops.get(f.id));
+    }
+    const r16 = bracket.fixtures.find((f) => f.id === 'R16-89')!;
+    expect(r16.topTeamCode).toBe(tops.get('R32-73'));
+    expect(r16.bottomTeamCode).toBe(tops.get('R32-74'));
+  });
+
+  it('a draw without advancesTeamCode blocks downstream resolution', () => {
+    const ranks = buildFifaRanks();
+    const knockoutScores: Record<string, KnockoutScoreEntryDto> = {};
+    for (const f of R32_FIXTURES) {
+      knockoutScores[f.id] = { homeGoals: 2, awayGoals: 0 };
+    }
+    knockoutScores['R32-73'] = { homeGoals: 1, awayGoals: 1 }; // draw, no advances
+    const bracket = buildBracket({
+      groupMatches: FULL_GROUP_RESULTS,
+      fifaRanks: ranks,
+      knockoutScores,
+    });
+    const r32 = bracket.fixtures.find((f) => f.id === 'R32-73')!;
+    expect(r32.predictedWinnerCode).toBeNull();
+    const r16 = bracket.fixtures.find((f) => f.id === 'R16-89')!;
+    expect(r16.topTeamCode).toBeNull(); // chain broken
+  });
+
+  it('a draw with advancesTeamCode propagates the chosen team', () => {
+    const ranks = buildFifaRanks();
+    const tops = topTeams();
+    const r32_73_top = tops.get('R32-73')!;
+    const knockoutScores: Record<string, KnockoutScoreEntryDto> = {};
+    for (const f of R32_FIXTURES) {
+      knockoutScores[f.id] = { homeGoals: 2, awayGoals: 0 };
+    }
+    knockoutScores['R32-73'] = {
+      homeGoals: 1,
+      awayGoals: 1,
+      advancesTeamCode: r32_73_top,
+    };
+    const bracket = buildBracket({
+      groupMatches: FULL_GROUP_RESULTS,
+      fifaRanks: ranks,
+      knockoutScores,
+    });
+    const r32 = bracket.fixtures.find((f) => f.id === 'R32-73')!;
+    expect(r32.predictedWinnerCode).toBe(r32_73_top);
+    const r16 = bracket.fixtures.find((f) => f.id === 'R16-89')!;
+    expect(r16.topTeamCode).toBe(r32_73_top);
+  });
+
+  it('a full chain of away-wins populates all rounds up to the Final', () => {
+    const ranks = buildFifaRanks();
+    const knockoutScores: Record<string, KnockoutScoreEntryDto> = {};
+    for (const f of [...R32_FIXTURES]) {
+      knockoutScores[f.id] = { homeGoals: 0, awayGoals: 3 };
+    }
+    // For R16+ we don't know the IDs upfront — set away-win for everything.
+    for (const id of [
+      'R16-89', 'R16-90', 'R16-91', 'R16-92',
+      'R16-93', 'R16-94', 'R16-95', 'R16-96',
+      'QF-97', 'QF-98', 'QF-99', 'QF-100',
+      'SF-101', 'SF-102',
+      'F-104', 'TP-103',
+    ]) {
+      knockoutScores[id] = { homeGoals: 0, awayGoals: 3 };
+    }
+    const bracket = buildBracket({
+      groupMatches: FULL_GROUP_RESULTS,
+      fifaRanks: ranks,
+      knockoutScores,
+    });
+    const final = bracket.fixtures.find((f) => f.id === 'F-104')!;
+    expect(final.topTeamCode).not.toBeNull();
+    expect(final.bottomTeamCode).not.toBeNull();
+    expect(final.predictedWinnerCode).toBe(final.bottomTeamCode);
+
+    const tp = bracket.fixtures.find((f) => f.id === 'TP-103')!;
+    expect(tp.topTeamCode).not.toBeNull();
+    expect(tp.bottomTeamCode).not.toBeNull();
+  });
+
+  it('output is deterministic — same inputs produce identical JSON', () => {
+    const ranks = buildFifaRanks();
+    const knockoutScores: Record<string, KnockoutScoreEntryDto> = {};
+    for (const f of R32_FIXTURES) {
+      knockoutScores[f.id] = { homeGoals: 2, awayGoals: 1 };
+    }
+    const a = buildBracket({
+      groupMatches: FULL_GROUP_RESULTS,
+      fifaRanks: ranks,
+      knockoutScores,
+    });
+    const b = buildBracket({
+      groupMatches: FULL_GROUP_RESULTS,
+      fifaRanks: ranks,
+      knockoutScores,
+    });
     expect(JSON.stringify(a)).toBe(JSON.stringify(b));
+  });
+});
+
+describe('assignThirdsToSlots', () => {
+  function third(group: GroupLetter, code: string): ThirdPlaceSlot {
+    return {
+      teamCode: code,
+      groupLetter: group,
+      position: 3,
+      played: 3, won: 0, drawn: 0, lost: 0,
+      goalsFor: 1, goalsAgainst: 1, goalDifference: 0,
+      points: 3, fifaRank: 30, bestThirdRank: 1,
+    };
+  }
+
+  it('respects allowedGroups when assigning', () => {
+    const slots = [
+      { id: 's1', allowedGroups: ['A', 'B'] as GroupLetter[] },
+      { id: 's2', allowedGroups: ['C', 'D'] as GroupLetter[] },
+    ];
+    const result = assignThirdsToSlots(slots, [third('A', 'A3'), third('C', 'C3')]);
+    expect(result.get('s1')).toBe('A3');
+    expect(result.get('s2')).toBe('C3');
+  });
+
+  it('backtracks when greedy would fail', () => {
+    const slots = [
+      { id: 's2', allowedGroups: ['A', 'B'] as GroupLetter[] },
+      { id: 's1', allowedGroups: ['A'] as GroupLetter[] },
+    ];
+    const result = assignThirdsToSlots(slots, [third('A', 'A3'), third('B', 'B3')]);
+    expect(result.get('s1')).toBe('A3');
+    expect(result.get('s2')).toBe('B3');
+  });
+
+  it('falls back when no valid matching exists', () => {
+    const slots = [
+      { id: 's1', allowedGroups: ['X' as GroupLetter] },
+      { id: 's2', allowedGroups: ['Y' as GroupLetter] },
+    ];
+    const result = assignThirdsToSlots(slots, [third('A', 'A3'), third('B', 'B3')]);
+    expect(result.size).toBe(2);
+  });
+
+  it('produces an empty map when fewer thirds than slots', () => {
+    const slots = [
+      { id: 's1', allowedGroups: ['A'] as GroupLetter[] },
+      { id: 's2', allowedGroups: ['B'] as GroupLetter[] },
+    ];
+    const result = assignThirdsToSlots(slots, [third('A', 'A3')]);
+    expect(result.size).toBe(0);
   });
 });

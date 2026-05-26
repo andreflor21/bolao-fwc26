@@ -70,7 +70,10 @@ export function Dashboard() {
             </p>
             <div className="flex flex-wrap gap-2">
               <Link to="/guesses" className="btn-gold">
-                Palpitar nos 72 jogos →
+                Dar palpites Fase de Grupos →
+              </Link>
+              <Link to="/knockout-guesses" className="btn-secondary">
+                Palpites de mata-mata
               </Link>
               <Link to="/bracket" className="btn-secondary">
                 Chaveamento previsto
@@ -82,7 +85,7 @@ export function Dashboard() {
                 Prêmios
               </Link>
               <Link to="/side-pools" className="btn-secondary">
-                Bolões paralelos
+                Seus Bolões
               </Link>
             </div>
           </div>

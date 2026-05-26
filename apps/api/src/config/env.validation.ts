@@ -68,6 +68,10 @@ class EnvVars {
 
   @IsOptional()
   @IsString()
+  COMPETITION_KO_LOCKS_AT?: string;
+
+  @IsOptional()
+  @IsString()
   COMPETITION_ENDS_AT?: string;
 
   @IsOptional()

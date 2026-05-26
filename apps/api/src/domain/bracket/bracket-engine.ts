@@ -1,9 +1,15 @@
-import type { BracketFixtureDto, BracketPreviewDto, GroupLetter } from '@bolao/shared';
+import type {
+  BracketFixtureDto,
+  BracketPreviewDto,
+  GroupLetter,
+  KnockoutScoreEntryDto,
+} from '@bolao/shared';
 import { GROUP_LETTERS } from '@bolao/shared';
 import { computeStandings } from './group-standings';
 import { pickBestThirds, type ThirdPlaceSlot } from './best-third-places';
 import {
   ALL_FIXTURES,
+  R32_FIXTURES,
   type FixtureTemplate,
   type SlotRef,
 } from './fifa-2026-bracket-map';
@@ -13,6 +19,12 @@ export interface BracketEngineInput {
   /** Group-stage match results (any subset; missing matches treated as not yet played). */
   groupMatches: Array<GroupMatchResult & { groupLetter: GroupLetter }>;
   fifaRanks: FifaRanks;
+  /**
+   * Per-fixture knockout score predictions, keyed by fixtureId. The engine
+   * uses these to derive winners/losers and propagate teams downstream.
+   * Omitted: R16+ slots resolve to null until the player fills R32 scores.
+   */
+  knockoutScores?: Record<string, KnockoutScoreEntryDto>;
 }
 
 interface ResolvedFixture {
@@ -24,25 +36,88 @@ interface ResolvedFixture {
 }
 
 /**
- * Deterministic predicted winner: lower FIFA rank wins.
- * Returns null if either side is null.
+ * Returns the predicted winner of a fixture based on the player's score
+ * for it. Null when either team isn't resolved yet, or when the score
+ * is a draw and the player hasn't declared who advances.
  */
-function predictWinner(top: string | null, bottom: string | null, ranks: FifaRanks): string | null {
-  if (!top || !bottom) return null;
-  const topRank = ranks[top] ?? 9999;
-  const bottomRank = ranks[bottom] ?? 9999;
-  if (topRank === bottomRank) {
-    // Final stable tie-break: alphabetical (deterministic, never null).
-    return top < bottom ? top : bottom;
+function deriveWinnerFromScore(
+  topTeamCode: string | null,
+  bottomTeamCode: string | null,
+  score: KnockoutScoreEntryDto | undefined,
+): { winner: string | null; loser: string | null } {
+  if (!topTeamCode || !bottomTeamCode || !score) {
+    return { winner: null, loser: null };
   }
-  return topRank < bottomRank ? top : bottom;
+  if (score.homeGoals > score.awayGoals) {
+    return { winner: topTeamCode, loser: bottomTeamCode };
+  }
+  if (score.awayGoals > score.homeGoals) {
+    return { winner: bottomTeamCode, loser: topTeamCode };
+  }
+  // Draw — player must declare advancesTeamCode.
+  const advances = score.advancesTeamCode;
+  if (advances === topTeamCode) {
+    return { winner: topTeamCode, loser: bottomTeamCode };
+  }
+  if (advances === bottomTeamCode) {
+    return { winner: bottomTeamCode, loser: topTeamCode };
+  }
+  return { winner: null, loser: null };
+}
+
+/**
+ * Assigns each of the 8 advancing thirds to exactly one BEST_THIRD_FROM
+ * R32 slot, respecting per-slot allowed-groups constraints. Uses
+ * backtracking — fast for n=8 (worst case 8! × 8 = 322k ops).
+ *
+ * Returns a map slotId → teamCode. If no valid bipartite matching exists
+ * (impossible under FIFA design but defensive nonetheless), falls back to
+ * a greedy assignment ignoring constraints.
+ */
+export function assignThirdsToSlots(
+  slots: Array<{ id: string; allowedGroups: GroupLetter[] }>,
+  thirds: ThirdPlaceSlot[],
+): Map<string, string> {
+  const result = new Map<string, string>();
+  if (thirds.length < slots.length) return result;
+
+  const used = new Array<boolean>(thirds.length).fill(false);
+  const assignment = new Array<number>(slots.length).fill(-1);
+
+  function backtrack(slotIdx: number): boolean {
+    if (slotIdx === slots.length) return true;
+    const allowed = slots[slotIdx]!.allowedGroups;
+    for (let i = 0; i < thirds.length; i++) {
+      if (used[i]) continue;
+      if (!allowed.includes(thirds[i]!.groupLetter)) continue;
+      used[i] = true;
+      assignment[slotIdx] = i;
+      if (backtrack(slotIdx + 1)) return true;
+      used[i] = false;
+      assignment[slotIdx] = -1;
+    }
+    return false;
+  }
+
+  if (backtrack(0)) {
+    for (let i = 0; i < slots.length; i++) {
+      result.set(slots[i]!.id, thirds[assignment[i]!]!.teamCode);
+    }
+    return result;
+  }
+
+  for (let i = 0; i < slots.length; i++) {
+    result.set(slots[i]!.id, thirds[i]!.teamCode);
+  }
+  return result;
 }
 
 function resolveSlot(
   slot: SlotRef,
   standingsByGroup: Map<GroupLetter, GroupStanding[]>,
-  bestThirds: ThirdPlaceSlot[],
+  thirdBySlotId: Map<string, string>,
   resolved: Map<string, ResolvedFixture>,
+  ownFixtureId: string,
 ): string | null {
   switch (slot.kind) {
     case 'WINNER_GROUP': {
@@ -53,8 +128,8 @@ function resolveSlot(
       const group = standingsByGroup.get(slot.group);
       return group?.[1]?.teamCode ?? null;
     }
-    case 'BEST_THIRD': {
-      return bestThirds[slot.rank - 1]?.teamCode ?? null;
+    case 'BEST_THIRD_FROM': {
+      return thirdBySlotId.get(ownFixtureId) ?? null;
     }
     case 'WINNER_OF': {
       return resolved.get(slot.fixtureId)?.predictedWinnerCode ?? null;
@@ -66,17 +141,25 @@ function resolveSlot(
 }
 
 /**
- * Builds the full predicted bracket from a set of group match results.
+ * Builds the predicted bracket from group results + the player's per-fixture
+ * knockout score predictions.
  *
- * For groups with incomplete results (fewer than 6 matches), standings are
- * computed from what's available — slots may resolve to null and predicted
- * winners propagate as null. This lets the engine produce a partial preview
- * while the user is still filling in their guesses.
+ *   1. Group standings → R32 teams (from WINNER_GROUP / RUNNER_UP_GROUP /
+ *      BEST_THIRD_FROM slots with bipartite assignment of the 8 thirds).
+ *   2. R32 winner = derived from the player's score for that fixture (draws
+ *      require an explicit advancesTeamCode).
+ *   3. R16 teams come from WINNER_OF previous R32 fixtures, and so on
+ *      through QF / SF / TP / Final. Each round resolves only when the
+ *      upstream round has a declared winner.
  *
- * Knockout winners are picked deterministically by FIFA rank (lower wins).
+ * Missing inputs propagate as `null` cleanly: a fixture without two
+ * resolved teams cannot have a predicted winner, and downstream fixtures
+ * remain null until the chain fills in. This lets the UI render a partial
+ * bracket and prompt the user to fill in gaps.
  */
 export function buildBracket(input: BracketEngineInput): BracketPreviewDto {
-  const { groupMatches, fifaRanks } = input;
+  const { groupMatches, fifaRanks, knockoutScores } = input;
+  const scores = knockoutScores ?? {};
 
   const matchesByGroup = new Map<GroupLetter, GroupMatchResult[]>();
   for (const m of groupMatches) {
@@ -110,23 +193,48 @@ export function buildBracket(input: BracketEngineInput): BracketPreviewDto {
     bestThirds = pickBestThirds(thirds);
   }
 
+  const thirdSlots = R32_FIXTURES.flatMap((f) => {
+    const slots: Array<{ id: string; allowedGroups: GroupLetter[] }> = [];
+    if (f.topSlot.kind === 'BEST_THIRD_FROM') {
+      slots.push({ id: `${f.id}:top`, allowedGroups: f.topSlot.allowedGroups });
+    }
+    if (f.bottomSlot.kind === 'BEST_THIRD_FROM') {
+      slots.push({ id: `${f.id}:bottom`, allowedGroups: f.bottomSlot.allowedGroups });
+    }
+    return slots;
+  });
+  const thirdBySlotId =
+    bestThirds.length >= thirdSlots.length
+      ? assignThirdsToSlots(thirdSlots, bestThirds)
+      : new Map<string, string>();
+
   const resolved = new Map<string, ResolvedFixture>();
   for (const template of ALL_FIXTURES) {
-    const topTeamCode = resolveSlot(template.topSlot, standingsByGroup, bestThirds, resolved);
-    const bottomTeamCode = resolveSlot(template.bottomSlot, standingsByGroup, bestThirds, resolved);
-    const predictedWinnerCode = predictWinner(topTeamCode, bottomTeamCode, fifaRanks);
-    const predictedLoserCode =
-      predictedWinnerCode && topTeamCode && bottomTeamCode
-        ? predictedWinnerCode === topTeamCode
-          ? bottomTeamCode
-          : topTeamCode
-        : null;
+    const topTeamCode = resolveSlot(
+      template.topSlot,
+      standingsByGroup,
+      thirdBySlotId,
+      resolved,
+      `${template.id}:top`,
+    );
+    const bottomTeamCode = resolveSlot(
+      template.bottomSlot,
+      standingsByGroup,
+      thirdBySlotId,
+      resolved,
+      `${template.id}:bottom`,
+    );
+    const { winner, loser } = deriveWinnerFromScore(
+      topTeamCode,
+      bottomTeamCode,
+      scores[template.id],
+    );
     resolved.set(template.id, {
       template,
       topTeamCode,
       bottomTeamCode,
-      predictedWinnerCode,
-      predictedLoserCode,
+      predictedWinnerCode: winner,
+      predictedLoserCode: loser,
     });
   }
 

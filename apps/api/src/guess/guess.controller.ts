@@ -13,6 +13,7 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { AuthenticatedUser } from '../auth/strategies/jwt.strategy';
 import { ActiveSubscriptionGuard } from '../auth/guards/active-subscription.guard';
 import { SaveDraftGuessesBody } from './dto/save-draft.dto';
+import { SaveKnockoutScoresBody } from './dto/save-knockout-scores.dto';
 
 @Controller('guesses')
 @UseGuards(ActiveSubscriptionGuard)
@@ -39,5 +40,25 @@ export class GuessController {
   @Get('bracket-preview')
   bracketPreview(@CurrentUser() user: AuthenticatedUser) {
     return this.guess.getBracketPreview(user.id);
+  }
+
+  @Get('knockout')
+  knockoutGuesses(@CurrentUser() user: AuthenticatedUser) {
+    return this.guess.getMyKnockoutGuesses(user.id);
+  }
+
+  @Put('knockout-scores')
+  @HttpCode(HttpStatus.OK)
+  saveKnockoutScores(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() body: SaveKnockoutScoresBody,
+  ) {
+    return this.guess.saveKnockoutScores(user.id, body);
+  }
+
+  @Post('knockout-submit')
+  @HttpCode(HttpStatus.OK)
+  submitKnockout(@CurrentUser() user: AuthenticatedUser) {
+    return this.guess.submitKnockoutGuesses(user.id);
   }
 }

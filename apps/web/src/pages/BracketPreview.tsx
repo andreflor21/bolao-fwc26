@@ -43,8 +43,8 @@ export function BracketPreview() {
   }
 
   const bracket = bracketQuery.data!;
-  const champion = bracket.fixtures.find((f) => f.id === 'FINAL')?.predictedWinnerCode;
-  const thirdPlace = bracket.fixtures.find((f) => f.id === 'TP')?.predictedWinnerCode;
+  const champion = bracket.fixtures.find((f) => f.id === 'F-104')?.predictedWinnerCode;
+  const thirdPlace = bracket.fixtures.find((f) => f.id === 'TP-103')?.predictedWinnerCode;
 
   return (
     <div className="space-y-8">
@@ -55,8 +55,7 @@ export function BracketPreview() {
             <span className="text-shimmer">CHAVEAMENTO PREVISTO</span>
           </h1>
           <p className="text-sm text-emerald-200/70 mt-2">
-            Derivado dos seus palpites de grupo. Vencedores nos mata-matas são previstos por
-            seed FIFA — apenas os placares de grupo contam para pontos hoje.
+            Derivado dos seus palpites de grupo. Os times e resultados são atualizados automaticamente conforme a competição avança, mas as previsões de campeão e 3º lugar não mudam.
           </p>
         </div>
         <Link to="/guesses" className="btn-secondary text-sm">

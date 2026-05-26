@@ -10,6 +10,7 @@ import { SidePools } from './pages/SidePools';
 import { JoinSidePool } from './pages/JoinSidePool';
 import { Guesses } from './pages/Guesses';
 import { BracketPreview } from './pages/BracketPreview';
+import { KnockoutGuesses } from './pages/KnockoutGuesses';
 import { PaymentPix } from './pages/PaymentPix';
 import { Ranking } from './pages/Ranking';
 import { Prizes } from './pages/Prizes';
@@ -68,6 +69,14 @@ export function App() {
           element={
             <ProtectedRoute>
               <BracketPreview />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/knockout-guesses"
+          element={
+            <ProtectedRoute>
+              <KnockoutGuesses />
             </ProtectedRoute>
           }
         />

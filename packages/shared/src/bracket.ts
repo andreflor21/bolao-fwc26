@@ -5,7 +5,7 @@ export type KnockoutStage = Exclude<MatchStage, 'group'>;
 export type SlotResolution =
   | { kind: 'WINNER_GROUP'; group: GroupLetter }
   | { kind: 'RUNNER_UP_GROUP'; group: GroupLetter }
-  | { kind: 'BEST_THIRD'; rank: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 }
+  | { kind: 'BEST_THIRD_FROM'; allowedGroups: GroupLetter[] }
   | { kind: 'WINNER_OF'; fixtureId: string }
   | { kind: 'LOSER_OF'; fixtureId: string };
 

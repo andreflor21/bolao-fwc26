@@ -39,6 +39,12 @@ export function Layout({ children }: { children: React.ReactNode }) {
                   Chaveamento
                 </Link>
                 <Link
+                  to="/knockout-guesses"
+                  className="px-3 py-2 rounded-lg text-emerald-100/90 hover:text-white hover:bg-emerald-500/10 transition"
+                >
+                  Mata-mata
+                </Link>
+                <Link
                   to="/ranking"
                   className="px-3 py-2 rounded-lg text-emerald-100/90 hover:text-white hover:bg-emerald-500/10 transition"
                 >
