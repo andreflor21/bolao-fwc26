@@ -8,6 +8,7 @@ import {
   Inject,
   Param,
   Post,
+  Query,
 } from '@nestjs/common';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { AuthenticatedUser } from '../auth/strategies/jwt.strategy';
@@ -24,18 +25,15 @@ export class PaymentController {
     @Inject(PAYMENT_DRIVER) private readonly driver: IPaymentDriver,
   ) {}
 
-  @Post('payment-intent')
+  @Post('checkout-session')
   @HttpCode(HttpStatus.CREATED)
-  createPaymentIntent(@CurrentUser() user: AuthenticatedUser) {
-    return this.payment.createOrGetPaymentIntent(user.id);
+  createCheckoutSession(@CurrentUser() user: AuthenticatedUser) {
+    return this.payment.createOrGetCheckoutSession(user.id);
   }
 
-  @Get('payment-intent/:id/status')
-  getPaymentIntentStatus(
-    @CurrentUser() user: AuthenticatedUser,
-    @Param('id') id: string,
-  ) {
-    return this.payment.getPaymentIntentStatus(user.id, id);
+  @Get('payment-status')
+  getPaymentStatus(@CurrentUser() user: AuthenticatedUser, @Query('sid') sid?: string) {
+    return this.payment.getPaymentStatus(user.id, sid);
   }
 
   @Post('refund')
@@ -45,13 +43,16 @@ export class PaymentController {
   }
 
   /**
-   * Dev/CI: synthesises a Stripe-style `payment_intent.succeeded` event and
-   * runs it through the real webhook handler. Disabled in production AND
-   * when a non-mock driver is configured.
+   * Dev/CI: completes a mock checkout session and synthesises a
+   * `checkout.session.completed` event through the real handler. Disabled in
+   * production and when a non-mock driver is configured.
    */
-  @Post('mock-confirm')
+  @Post('mock-confirm/:sessionId')
   @HttpCode(HttpStatus.OK)
-  async mockConfirm(@CurrentUser() user: AuthenticatedUser) {
+  async mockConfirm(
+    @CurrentUser() _user: AuthenticatedUser,
+    @Param('sessionId') sessionId: string,
+  ) {
     if (process.env.NODE_ENV === 'production') {
       throw new ForbiddenException('mock-confirm is disabled in production');
     }
@@ -60,17 +61,15 @@ export class PaymentController {
         'mock-confirm requires STRIPE_DRIVER=mock — production drivers must use real Stripe events',
       );
     }
-    const piId = await this.payment.getOwnPaymentIntentId(user.id);
-    if (!piId) {
-      throw new ForbiddenException('No payment intent to confirm — call POST /subscription/payment-intent first');
-    }
-    const succeeded = this.driver.forceSucceed(piId);
+    const { session, pi } = this.driver.forceSucceed(sessionId);
     const synth: WebhookEvent = {
-      id: `mock_evt_${succeeded.id}_${Date.now()}`,
-      type: 'payment_intent.succeeded',
-      paymentIntent: succeeded,
+      id: `mock_evt_${session.sessionId}_${Date.now()}`,
+      type: 'checkout.session.completed',
+      paymentIntent: pi,
+      paymentIntentId: pi.id,
+      checkoutSessionId: session.sessionId,
     };
     const result = await this.payment.handleWebhookEvent(synth, 'mock');
-    return { mock: true, paymentIntentId: succeeded.id, webhook: result };
+    return { mock: true, sessionId: session.sessionId, paymentIntentId: pi.id, webhook: result };
   }
 }

@@ -7,93 +7,95 @@ describe('MockPaymentDriver', () => {
     driver = new MockPaymentDriver();
   });
 
-  describe('createPixPaymentIntent', () => {
-    it('creates a PI in requires_payment_method status with QR fields', async () => {
-      const pi = await driver.createPixPaymentIntent({
-        userId: 'user-1',
-        amountCents: 5000,
-        metadata: { competitionId: 'fifa-wc-2026' },
-      });
+  function makeSession(opts?: { userId?: string; amountCents?: number }) {
+    return driver.createCheckoutSession({
+      userId: opts?.userId ?? 'user-1',
+      amountCents: opts?.amountCents ?? 5000,
+      description: 'Test subscription',
+      successUrl: 'http://localhost:5173/pay/success',
+      cancelUrl: 'http://localhost:5173/pay/cancel',
+      methods: ['card', 'link', 'boleto'],
+      boletoExpiresAfterDays: 3,
+      metadata: { competitionId: 'fifa-wc-2026' },
+    });
+  }
 
-      expect(pi.paymentIntentId).toMatch(/^mock_pi_/);
-      expect(pi.amountCents).toBe(5000);
-      expect(pi.status).toBe('requires_payment_method');
-      expect(pi.pix.qrCodeText).toContain('BR.GOV.BCB.PIX');
-      expect(pi.pix.qrCodePngUrl).toMatch(/^data:image\/png;base64,/);
-      expect(new Date(pi.pix.expiresAt).getTime()).toBeGreaterThan(Date.now());
-      expect(pi.metadata.competitionId).toBe('fifa-wc-2026');
+  describe('createCheckoutSession', () => {
+    it('creates a session in `open` status with mock URL', async () => {
+      const s = await makeSession();
+      expect(s.sessionId).toMatch(/^mock_cs_/);
+      expect(s.paymentIntentId).toMatch(/^mock_pi_/);
+      expect(s.amountCents).toBe(5000);
+      expect(s.status).toBe('open');
+      expect(s.url).toContain('/pay/mock-success?sid=');
+      expect(new Date(s.expiresAt).getTime()).toBeGreaterThan(Date.now());
+      expect(s.metadata.userId).toBe('user-1');
+      expect(s.metadata.competitionId).toBe('fifa-wc-2026');
     });
 
-    it('honours custom expiresInSeconds', async () => {
-      const pi = await driver.createPixPaymentIntent({
-        userId: 'user-1',
-        amountCents: 5000,
-        expiresInSeconds: 60,
+    it('honours the success URL origin so the mock redirect stays on the SPA', async () => {
+      const s = await driver.createCheckoutSession({
+        userId: 'u',
+        amountCents: 1000,
+        description: 'x',
+        successUrl: 'https://bolao.app/pay/success',
+        cancelUrl: 'https://bolao.app/pay/cancel',
+        methods: ['card'],
       });
-      const ttl = new Date(pi.pix.expiresAt).getTime() - Date.now();
-      expect(ttl).toBeLessThanOrEqual(60_000 + 100);
-      expect(ttl).toBeGreaterThan(50_000);
+      expect(s.url.startsWith('https://bolao.app/')).toBe(true);
     });
   });
 
-  describe('retrieve', () => {
-    it('returns the stored snapshot', async () => {
-      const created = await driver.createPixPaymentIntent({
-        userId: 'user-1',
-        amountCents: 5000,
-      });
-      const snap = await driver.retrieve(created.paymentIntentId);
-      expect(snap.id).toBe(created.paymentIntentId);
-      expect(snap.status).toBe('requires_payment_method');
+  describe('retrieveCheckoutSession + retrieve', () => {
+    it('retrieves the session and its PI', async () => {
+      const s = await makeSession();
+      const reloaded = await driver.retrieveCheckoutSession(s.sessionId);
+      expect(reloaded.sessionId).toBe(s.sessionId);
+      const pi = await driver.retrieve(s.paymentIntentId!);
+      expect(pi.id).toBe(s.paymentIntentId);
+      expect(pi.status).toBe('requires_payment_method');
     });
 
     it('throws on unknown id', async () => {
       await expect(driver.retrieve('mock_pi_unknown')).rejects.toThrow(/not found/);
+      await expect(driver.retrieveCheckoutSession('mock_cs_unknown')).rejects.toThrow(/not found/);
     });
   });
 
   describe('forceSucceed', () => {
-    it('flips a pending PI to succeeded and records succeededAt', async () => {
-      const created = await driver.createPixPaymentIntent({
-        userId: 'user-1',
-        amountCents: 5000,
-      });
-      const succeeded = driver.forceSucceed(created.paymentIntentId);
-      expect(succeeded.status).toBe('succeeded');
-      expect(succeeded.succeededAt).not.toBeNull();
-      const reloaded = await driver.retrieve(created.paymentIntentId);
+    it('flips a session to complete and its PI to succeeded', async () => {
+      const s = await makeSession();
+      const { session, pi } = driver.forceSucceed(s.sessionId);
+      expect(session.status).toBe('complete');
+      expect(pi.status).toBe('succeeded');
+      expect(pi.succeededAt).not.toBeNull();
+      const reloaded = await driver.retrieve(s.paymentIntentId!);
       expect(reloaded.status).toBe('succeeded');
     });
 
-    it('throws on unknown PI', () => {
-      expect(() => driver.forceSucceed('mock_pi_ghost')).toThrow(/not found/);
+    it('throws on unknown session', () => {
+      expect(() => driver.forceSucceed('mock_cs_ghost')).toThrow(/not found/);
     });
   });
 
   describe('refund', () => {
     it('refunds a succeeded PI and returns matching amount', async () => {
-      const created = await driver.createPixPaymentIntent({
-        userId: 'u',
-        amountCents: 5000,
-      });
-      driver.forceSucceed(created.paymentIntentId);
-      const refund = await driver.refund(created.paymentIntentId);
+      const s = await makeSession();
+      driver.forceSucceed(s.sessionId);
+      const refund = await driver.refund(s.paymentIntentId!);
       expect(refund.amountCents).toBe(5000);
       expect(refund.refundId).toMatch(/^mock_re_/);
-      expect(refund.paymentIntentId).toBe(created.paymentIntentId);
+      expect(refund.paymentIntentId).toBe(s.paymentIntentId);
     });
 
     it('rejects refund on non-succeeded PI', async () => {
-      const created = await driver.createPixPaymentIntent({
-        userId: 'u',
-        amountCents: 5000,
-      });
-      await expect(driver.refund(created.paymentIntentId)).rejects.toThrow(/in status/);
+      const s = await makeSession();
+      await expect(driver.refund(s.paymentIntentId!)).rejects.toThrow(/in status/);
     });
   });
 
   describe('parseWebhookEvent', () => {
-    it('parses a JSON envelope without signature', () => {
+    it('parses a JSON envelope without signature (PI event)', () => {
       const body = Buffer.from(
         JSON.stringify({
           id: 'evt_123',
@@ -113,15 +115,34 @@ describe('MockPaymentDriver', () => {
       expect(event.id).toBe('evt_123');
       expect(event.type).toBe('payment_intent.succeeded');
       expect(event.paymentIntent?.id).toBe('mock_pi_x');
+      expect(event.paymentIntentId).toBe('mock_pi_x');
+      expect(event.checkoutSessionId).toBeNull();
+    });
+
+    it('parses a checkout.session.completed envelope with session id', () => {
+      const body = Buffer.from(
+        JSON.stringify({
+          id: 'evt_cs1',
+          type: 'checkout.session.completed',
+          checkoutSessionId: 'mock_cs_abc',
+          paymentIntentId: 'mock_pi_abc',
+        }),
+      );
+      const event = driver.parseWebhookEvent(body, null);
+      expect(event.type).toBe('checkout.session.completed');
+      expect(event.checkoutSessionId).toBe('mock_cs_abc');
+      expect(event.paymentIntentId).toBe('mock_pi_abc');
     });
   });
 
   describe('listRecentPaymentIntents', () => {
     it('filters by created since cutoff', async () => {
-      const pi1 = await driver.createPixPaymentIntent({ userId: 'u', amountCents: 100 });
-      const pi2 = await driver.createPixPaymentIntent({ userId: 'u', amountCents: 200 });
+      const s1 = await makeSession({ amountCents: 100 });
+      const s2 = await makeSession({ amountCents: 200 });
       const all = await driver.listRecentPaymentIntents(0);
-      expect(all.map((p) => p.id).sort()).toEqual([pi1.paymentIntentId, pi2.paymentIntentId].sort());
+      expect(all.map((p) => p.id).sort()).toEqual(
+        [s1.paymentIntentId!, s2.paymentIntentId!].sort(),
+      );
 
       const future = Math.floor(Date.now() / 1000) + 60;
       const none = await driver.listRecentPaymentIntents(future);

@@ -1,63 +1,75 @@
 import { Logger } from '@nestjs/common';
 import { randomBytes } from 'node:crypto';
 import type {
-  CreatePixIntentInput,
+  CheckoutSession,
+  CreateCheckoutSessionInput,
   IPaymentDriver,
   PaymentIntentSnapshot,
-  PixPaymentIntent,
   RefundResult,
   WebhookEvent,
 } from './payment-driver.interface';
 
+interface MockSessionState {
+  session: CheckoutSession;
+  userId: string;
+  pi: PaymentIntentSnapshot;
+}
+
 /**
- * In-memory mock payment driver for dev and CI. Generates deterministic-ish
- * fake Pix payment intents. Provides `forceSucceed()` for tests / dev flows
- * to flip a PI to `succeeded` and let the webhook handler run the same code
- * path as production.
+ * In-memory mock driver for dev / CI. Generates fake Checkout Sessions
+ * pointing at a `/pay/mock-success?sid=...` URL the SPA can recognise.
+ * Provides `forceSucceed()` to flip a session to `complete` so tests +
+ * dev flows run the same activation path as production webhooks.
  */
 export class MockPaymentDriver implements IPaymentDriver {
   readonly name = 'mock' as const;
   private readonly logger = new Logger(MockPaymentDriver.name);
+  private readonly sessions = new Map<string, MockSessionState>();
   private readonly intents = new Map<string, PaymentIntentSnapshot>();
 
-  async createPixPaymentIntent(input: CreatePixIntentInput): Promise<PixPaymentIntent> {
-    const id = `mock_pi_${randomBytes(12).toString('hex')}`;
+  async createCheckoutSession(input: CreateCheckoutSessionInput): Promise<CheckoutSession> {
+    const sessionId = `mock_cs_${randomBytes(12).toString('hex')}`;
+    const piId = `mock_pi_${randomBytes(12).toString('hex')}`;
     const now = new Date();
-    const expiresAt = new Date(now.getTime() + (input.expiresInSeconds ?? 24 * 3600) * 1000);
-    const snapshot: PaymentIntentSnapshot = {
-      id,
+    const expiresAt = new Date(now.getTime() + 24 * 3600 * 1000);
+
+    const pi: PaymentIntentSnapshot = {
+      id: piId,
       status: 'requires_payment_method',
       amountCents: input.amountCents,
-      metadata: input.metadata ?? {},
+      metadata: { userId: input.userId, ...(input.metadata ?? {}) },
       createdAt: now.toISOString(),
       succeededAt: null,
       canceledAt: null,
     };
-    this.intents.set(id, snapshot);
-    this.logger.debug(`Created mock PI ${id} for user ${input.userId} (${input.amountCents}c)`);
+    this.intents.set(piId, pi);
 
-    const qrText = `00020126360014BR.GOV.BCB.PIX0114bolao+mock+${id}5204000053039865802BR5913BOLAO MOCK6009SAO PAULO62070503***6304ABCD`;
-    return {
-      paymentIntentId: id,
-      clientSecret: null,
-      status: snapshot.status,
-      amountCents: snapshot.amountCents,
-      metadata: snapshot.metadata,
-      pix: {
-        qrCodeText: qrText,
-        // 1x1 transparent PNG — frontend can fall back to client-side qrcode lib if needed.
-        qrCodePngUrl:
-          'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=',
-        expiresAt: expiresAt.toISOString(),
-      },
+    const session: CheckoutSession = {
+      sessionId,
+      // Point at a SPA route the dev frontend can handle.
+      url: `${this.deriveOrigin(input.successUrl)}/pay/mock-success?sid=${sessionId}`,
+      status: 'open',
+      amountCents: input.amountCents,
+      expiresAt: expiresAt.toISOString(),
+      paymentIntentId: piId,
+      metadata: { userId: input.userId, ...(input.metadata ?? {}) },
     };
+    this.sessions.set(sessionId, { session, userId: input.userId, pi });
+    this.logger.debug(
+      `Created mock checkout session ${sessionId} (PI ${piId}) for user ${input.userId} (${input.amountCents}c, methods=${input.methods.join('+')})`,
+    );
+    return session;
+  }
+
+  async retrieveCheckoutSession(sessionId: string): Promise<CheckoutSession> {
+    const state = this.sessions.get(sessionId);
+    if (!state) throw new Error(`Mock session ${sessionId} not found`);
+    return state.session;
   }
 
   async retrieve(paymentIntentId: string): Promise<PaymentIntentSnapshot> {
     const pi = this.intents.get(paymentIntentId);
-    if (!pi) {
-      throw new Error(`Mock PI ${paymentIntentId} not found`);
-    }
+    if (!pi) throw new Error(`Mock PI ${paymentIntentId} not found`);
     return pi;
   }
 
@@ -81,11 +93,15 @@ export class MockPaymentDriver implements IPaymentDriver {
       id: string;
       type: string;
       paymentIntent?: PaymentIntentSnapshot;
+      paymentIntentId?: string;
+      checkoutSessionId?: string;
     };
     return {
       id: parsed.id,
       type: parsed.type,
       paymentIntent: parsed.paymentIntent ?? null,
+      paymentIntentId: parsed.paymentIntentId ?? parsed.paymentIntent?.id ?? null,
+      checkoutSessionId: parsed.checkoutSessionId ?? null,
     };
   }
 
@@ -95,19 +111,31 @@ export class MockPaymentDriver implements IPaymentDriver {
   }
 
   /**
-   * Dev-only: flips a mock PI to succeeded and returns the updated snapshot.
-   * Callers should then synthesize a `payment_intent.succeeded` webhook
-   * event so production and dev share the same activation code path.
+   * Dev-only: flips a mock checkout session to `complete` and its underlying
+   * PI to `succeeded`. Returns the PI snapshot so callers can synthesise a
+   * `checkout.session.completed` webhook event identical to what Stripe
+   * would deliver in production.
    */
-  forceSucceed(paymentIntentId: string): PaymentIntentSnapshot {
-    const pi = this.intents.get(paymentIntentId);
-    if (!pi) throw new Error(`Mock PI ${paymentIntentId} not found`);
-    const updated: PaymentIntentSnapshot = {
-      ...pi,
+  forceSucceed(sessionId: string): { session: CheckoutSession; pi: PaymentIntentSnapshot } {
+    const state = this.sessions.get(sessionId);
+    if (!state) throw new Error(`Mock session ${sessionId} not found`);
+    const updatedPi: PaymentIntentSnapshot = {
+      ...state.pi,
       status: 'succeeded',
       succeededAt: new Date().toISOString(),
     };
-    this.intents.set(paymentIntentId, updated);
-    return updated;
+    const updatedSession: CheckoutSession = { ...state.session, status: 'complete' };
+    this.intents.set(updatedPi.id, updatedPi);
+    this.sessions.set(sessionId, { ...state, session: updatedSession, pi: updatedPi });
+    return { session: updatedSession, pi: updatedPi };
+  }
+
+  private deriveOrigin(url: string): string {
+    try {
+      const u = new URL(url);
+      return u.origin;
+    } catch {
+      return 'http://localhost:5173';
+    }
   }
 }

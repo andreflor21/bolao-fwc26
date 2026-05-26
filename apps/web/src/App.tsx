@@ -11,7 +11,9 @@ import { JoinSidePool } from './pages/JoinSidePool';
 import { Guesses } from './pages/Guesses';
 import { BracketPreview } from './pages/BracketPreview';
 import { KnockoutGuesses } from './pages/KnockoutGuesses';
-import { PaymentPix } from './pages/PaymentPix';
+import { Payment } from './pages/Payment';
+import { PaymentSuccess } from './pages/PaymentSuccess';
+import { PaymentCancel } from './pages/PaymentCancel';
 import { Ranking } from './pages/Ranking';
 import { Prizes } from './pages/Prizes';
 import { AdminRoute } from './pages/admin/AdminLayout';
@@ -89,7 +91,31 @@ export function App() {
           path="/pay"
           element={
             <ProtectedRoute>
-              <PaymentPix />
+              <Payment />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/pay/success"
+          element={
+            <ProtectedRoute>
+              <PaymentSuccess />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/pay/mock-success"
+          element={
+            <ProtectedRoute>
+              <PaymentSuccess />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/pay/cancel"
+          element={
+            <ProtectedRoute>
+              <PaymentCancel />
             </ProtectedRoute>
           }
         />
