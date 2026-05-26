@@ -23,6 +23,18 @@ class EnvVars {
   REDIS_PORT?: number;
 
   @IsOptional()
+  @IsString()
+  REDIS_PASSWORD?: string;
+
+  @IsOptional()
+  @IsString()
+  REDIS_USERNAME?: string;
+
+  @IsOptional()
+  @IsString()
+  REDIS_TLS?: string;
+
+  @IsOptional()
   @IsInt()
   API_PORT?: number;
 

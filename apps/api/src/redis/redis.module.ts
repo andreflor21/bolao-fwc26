@@ -9,9 +9,15 @@ const redisProvider = {
   useFactory: (config: ConfigService): Redis => {
     const host = config.get<string>('REDIS_HOST') ?? 'localhost';
     const port = Number(config.get<number>('REDIS_PORT') ?? 6379);
+    const password = config.get<string>('REDIS_PASSWORD');
+    const username = config.get<string>('REDIS_USERNAME');
+    const tlsEnabled = config.get<string>('REDIS_TLS') === 'true';
     const client = new Redis({
       host,
       port,
+      ...(username ? { username } : {}),
+      ...(password ? { password } : {}),
+      ...(tlsEnabled ? { tls: {} } : {}),
       lazyConnect: false,
       maxRetriesPerRequest: 3,
       enableReadyCheck: true,
