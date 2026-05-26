@@ -21,7 +21,12 @@ export async function api<T = unknown>(
   init: RequestInit = {},
 ): Promise<T> {
   const headers = new Headers(init.headers);
-  headers.set('Content-Type', 'application/json');
+  // Only declare a JSON content-type when we actually send a body. Otherwise
+  // Fastify rejects POSTs with `Content-Type: application/json` + empty body
+  // ("Body cannot be empty when content-type is set to 'application/json'").
+  if (init.body !== undefined && init.body !== null && !headers.has('Content-Type')) {
+    headers.set('Content-Type', 'application/json');
+  }
   if (accessToken) headers.set('Authorization', `Bearer ${accessToken}`);
 
   const res = await fetch(`${BASE}${path}`, { ...init, headers });

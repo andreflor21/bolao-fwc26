@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { api, ApiError } from '../lib/api';
 import { BracketSlot } from '../components/BracketSlot';
+import { flagUrl } from '../lib/flags';
 import type { BracketPreviewDto, KnockoutStage } from '@bolao/shared';
 
 const STAGE_LABEL: Record<KnockoutStage, string> = {
@@ -93,23 +94,38 @@ export function BracketPreview() {
                   </tr>
                 </thead>
                 <tbody>
-                  {standings.map((s) => (
-                    <tr
-                      key={s.teamCode}
-                      className={
-                        s.position <= 2
-                          ? 'text-gold-200 font-semibold'
-                          : s.position === 3
-                          ? 'text-emerald-100'
-                          : 'text-emerald-200/60'
-                      }
-                    >
-                      <td>{s.position}</td>
-                      <td>{s.teamCode}</td>
-                      <td className="text-right">{s.points}</td>
-                      <td className="text-right">{s.goalDifference >= 0 ? `+${s.goalDifference}` : s.goalDifference}</td>
-                    </tr>
-                  ))}
+                  {standings.map((s) => {
+                    const url = flagUrl(s.teamCode);
+                    return (
+                      <tr
+                        key={s.teamCode}
+                        className={
+                          s.position <= 2
+                            ? 'text-gold-200 font-semibold'
+                            : s.position === 3
+                            ? 'text-emerald-100'
+                            : 'text-emerald-200/60'
+                        }
+                      >
+                        <td>{s.position}</td>
+                        <td>
+                          <span className="flex items-center gap-1.5">
+                            {url && (
+                              <img
+                                src={url}
+                                alt=""
+                                loading="lazy"
+                                className="w-4 h-3 object-cover rounded-[2px] ring-1 ring-black/20"
+                              />
+                            )}
+                            {s.teamCode}
+                          </span>
+                        </td>
+                        <td className="text-right">{s.points}</td>
+                        <td className="text-right">{s.goalDifference >= 0 ? `+${s.goalDifference}` : s.goalDifference}</td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -123,11 +139,22 @@ export function BracketPreview() {
             8 Melhores 3º colocados
           </h2>
           <div className="flex flex-wrap gap-2">
-            {bracket.bestThirds.map((t) => (
-              <span key={t.teamCode} className="chip">
-                #{t.bestThirdRank} · {t.teamCode} (G{t.groupLetter})
-              </span>
-            ))}
+            {bracket.bestThirds.map((t) => {
+              const url = flagUrl(t.teamCode);
+              return (
+                <span key={t.teamCode} className="chip gap-2">
+                  {url && (
+                    <img
+                      src={url}
+                      alt=""
+                      loading="lazy"
+                      className="w-4 h-3 object-cover rounded-[2px] ring-1 ring-black/20"
+                    />
+                  )}
+                  #{t.bestThirdRank} · {t.teamCode} (G{t.groupLetter})
+                </span>
+              );
+            })}
           </div>
         </section>
       )}

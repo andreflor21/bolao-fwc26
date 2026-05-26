@@ -1,4 +1,5 @@
 import type { BracketFixtureDto } from '@bolao/shared';
+import { flagUrl } from '../lib/flags';
 
 interface Props {
   fixture: BracketFixtureDto;
@@ -20,14 +21,25 @@ function SlotRow({ code, highlighted }: { code: string | null; highlighted: bool
   if (!code) {
     return <div className="text-emerald-200/30 italic py-0.5">— a definir —</div>;
   }
+  const url = flagUrl(code);
   return (
     <div
       className={
-        'flex items-center justify-between py-0.5 ' +
+        'flex items-center justify-between py-0.5 gap-2 ' +
         (highlighted ? 'text-gold-200 font-bold' : 'text-emerald-100/85')
       }
     >
-      <span>{code}</span>
+      <span className="flex items-center gap-1.5 min-w-0">
+        {url && (
+          <img
+            src={url}
+            alt=""
+            loading="lazy"
+            className="w-4 h-3 object-cover rounded-[2px] ring-1 ring-black/20 shrink-0"
+          />
+        )}
+        <span className="truncate">{code}</span>
+      </span>
       {highlighted && <span className="text-[10px]">✓</span>}
     </div>
   );

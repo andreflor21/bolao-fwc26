@@ -1,10 +1,28 @@
 import type { MatchDto } from '@bolao/shared';
+import { flagUrl } from '../lib/flags';
 
 interface Props {
   match: MatchDto;
   guess?: { homeGoals: number; awayGoals: number };
   onChange?: (homeGoals: number, awayGoals: number) => void;
   readOnly?: boolean;
+}
+
+function TeamFlag({ code, className = '' }: { code: string | null; className?: string }) {
+  const url = flagUrl(code);
+  if (!url) {
+    return (
+      <span className={`inline-block bg-emerald-500/15 rounded-sm ${className}`} aria-hidden />
+    );
+  }
+  return (
+    <img
+      src={url}
+      alt=""
+      loading="lazy"
+      className={`inline-block object-cover rounded-sm shadow-sm ring-1 ring-black/20 ${className}`}
+    />
+  );
 }
 
 const BRT_FORMATTER = new Intl.DateTimeFormat('pt-BR', {
@@ -41,9 +59,12 @@ export function MatchCard({ match, guess, onChange, readOnly }: Props) {
         {match.city && <span className="truncate ml-2 max-w-[60%]">{match.city}</span>}
       </div>
       <div className="grid grid-cols-[1fr,auto,1fr] items-center gap-3">
-        <div className="text-right">
-          <p className="text-sm font-semibold text-emerald-50 truncate">{match.homeTeamName ?? match.homeTeamCode}</p>
-          <p className="text-[10px] tracking-widest text-emerald-300/60">{match.homeTeamCode}</p>
+        <div className="flex items-center justify-end gap-2 min-w-0">
+          <div className="text-right min-w-0">
+            <p className="text-sm font-semibold text-emerald-50 truncate">{match.homeTeamName ?? match.homeTeamCode}</p>
+            <p className="text-[10px] tracking-widest text-emerald-300/60">{match.homeTeamCode}</p>
+          </div>
+          <TeamFlag code={match.homeTeamCode} className="w-7 h-5 shrink-0" />
         </div>
         <div className="flex items-center gap-2">
           <input
@@ -70,9 +91,12 @@ export function MatchCard({ match, guess, onChange, readOnly }: Props) {
             aria-label="Gols do visitante"
           />
         </div>
-        <div className="text-left">
-          <p className="text-sm font-semibold text-emerald-50 truncate">{match.awayTeamName ?? match.awayTeamCode}</p>
-          <p className="text-[10px] tracking-widest text-emerald-300/60">{match.awayTeamCode}</p>
+        <div className="flex items-center gap-2 min-w-0">
+          <TeamFlag code={match.awayTeamCode} className="w-7 h-5 shrink-0" />
+          <div className="text-left min-w-0">
+            <p className="text-sm font-semibold text-emerald-50 truncate">{match.awayTeamName ?? match.awayTeamCode}</p>
+            <p className="text-[10px] tracking-widest text-emerald-300/60">{match.awayTeamCode}</p>
+          </div>
         </div>
       </div>
     </div>
