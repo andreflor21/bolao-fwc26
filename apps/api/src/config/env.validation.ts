@@ -109,6 +109,34 @@ class EnvVars {
   @IsOptional()
   @IsInt()
   STRIPE_BOLETO_EXPIRES_AFTER_DAYS?: number;
+
+  @IsOptional()
+  @IsString()
+  PIX_FALLBACK_ENABLED?: string;
+
+  @IsOptional()
+  @IsString()
+  PIX_FALLBACK_PAYLOAD?: string;
+
+  @IsOptional()
+  @IsString()
+  PIX_FALLBACK_PIX_KEY?: string;
+
+  @IsOptional()
+  @IsString()
+  PIX_FALLBACK_RECIPIENT_NAME?: string;
+
+  @IsOptional()
+  @IsString()
+  PIX_FALLBACK_RECIPIENT_CNPJ?: string;
+
+  @IsOptional()
+  @IsString()
+  ANTHROPIC_API_KEY?: string;
+
+  @IsOptional()
+  @IsString()
+  ANTHROPIC_MODEL?: string;
 }
 
 export function validateEnv(config: Record<string, unknown>): EnvVars {

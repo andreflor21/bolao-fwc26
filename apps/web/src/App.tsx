@@ -14,6 +14,7 @@ import { KnockoutGuesses } from './pages/KnockoutGuesses';
 import { Payment } from './pages/Payment';
 import { PaymentSuccess } from './pages/PaymentSuccess';
 import { PaymentCancel } from './pages/PaymentCancel';
+import { PaymentPix } from './pages/PaymentPix';
 import { Ranking } from './pages/Ranking';
 import { Prizes } from './pages/Prizes';
 import { AdminRoute } from './pages/admin/AdminLayout';
@@ -116,6 +117,14 @@ export function App() {
           element={
             <ProtectedRoute>
               <PaymentCancel />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/pay/pix"
+          element={
+            <ProtectedRoute>
+              <PaymentPix />
             </ProtectedRoute>
           }
         />

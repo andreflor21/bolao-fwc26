@@ -31,6 +31,8 @@ export interface CreateCheckoutSessionResponse {
   subscriptionStatus: 'pending_payment' | 'active' | 'refunded';
   /** ISO list of methods enabled for this session (shown in UI as a heads-up). */
   methods: PaymentMethodKey[];
+  /** True when the manual-Pix (BR Code + IA do comprovante) fallback is wired. */
+  pixFallbackEnabled: boolean;
 }
 
 export interface PaymentStatusResponse {
@@ -52,6 +54,7 @@ export class PaymentService {
   private readonly methods: PaymentMethodKey[];
   private readonly boletoExpiresAfterDays: number;
   private readonly webOrigin: string;
+  private readonly pixFallbackEnabled: boolean;
 
   constructor(
     @Inject(PAYMENT_DRIVER) private readonly driver: IPaymentDriver,
@@ -63,6 +66,11 @@ export class PaymentService {
     this.amountCents = Number(config.get('SUBSCRIPTION_AMOUNT_CENTS') ?? 5000);
     this.boletoExpiresAfterDays = Number(config.get('STRIPE_BOLETO_EXPIRES_AFTER_DAYS') ?? 3);
     this.webOrigin = config.get<string>('WEB_ORIGIN') ?? 'http://localhost:5173';
+    // Manual-Pix fallback feature flag — surfaced on the create-session
+    // response so the /pay UI can offer the "pagar com Pix" link without
+    // a second roundtrip. PixFallbackService gates the actual endpoints.
+    this.pixFallbackEnabled =
+      (config.get<string>('PIX_FALLBACK_ENABLED') ?? 'false').toLowerCase() === 'true';
     const raw = config.get<string>('STRIPE_CHECKOUT_METHODS');
     if (raw) {
       const parsed = raw
@@ -510,6 +518,7 @@ export class PaymentService {
       amountCents: session.amountCents || this.amountCents,
       subscriptionStatus,
       methods: this.methods,
+      pixFallbackEnabled: this.pixFallbackEnabled,
     };
   }
 }

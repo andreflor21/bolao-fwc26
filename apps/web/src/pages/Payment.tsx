@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { api, ApiError } from '../lib/api';
 
 interface CreateSessionResponse {
@@ -10,6 +10,7 @@ interface CreateSessionResponse {
   amountCents: number;
   subscriptionStatus: 'pending_payment' | 'active' | 'refunded';
   methods: Array<'card' | 'link' | 'boleto' | 'pix' | 'apple_pay'>;
+  pixFallbackEnabled: boolean;
 }
 
 const METHOD_LABEL: Record<string, string> = {
@@ -49,6 +50,7 @@ export function Payment() {
   // the same session (idempotent), so no waste.
   const [methods, setMethods] = useState<CreateSessionResponse['methods']>([]);
   const [amountCents, setAmountCents] = useState<number | null>(null);
+  const [pixFallback, setPixFallback] = useState(false);
   useEffect(() => {
     let cancelled = false;
     api<CreateSessionResponse>('/subscription/checkout-session', { method: 'POST' })
@@ -56,6 +58,7 @@ export function Payment() {
         if (cancelled) return;
         setMethods(data.methods);
         setAmountCents(data.amountCents);
+        setPixFallback(data.pixFallbackEnabled);
       })
       .catch((e: unknown) => {
         if (e instanceof ApiError && e.status === 409) {
@@ -133,6 +136,23 @@ export function Payment() {
             pagamento, voltará automaticamente para o app.
           </p>
         </div>
+
+        {pixFallback && (
+          <div className="border-t border-emerald-500/15 pt-4">
+            <p className="text-xs text-emerald-300/70 tracking-wider uppercase mb-2">
+              Ou pague com Pix
+            </p>
+            <Link
+              to="/pay/pix"
+              className="inline-flex items-center gap-2 text-sm text-emerald-100 border border-emerald-500/30 hover:border-emerald-400/60 rounded-md px-4 py-2 transition"
+            >
+              📱 Pagar com Pix (QR Code + comprovante)
+            </Link>
+            <p className="text-[11px] text-emerald-200/50 mt-2">
+              Anexe o comprovante e confirmamos sua inscrição automaticamente.
+            </p>
+          </div>
+        )}
       </section>
 
       <p className="text-xs text-emerald-200/60 text-center">

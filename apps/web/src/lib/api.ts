@@ -48,6 +48,31 @@ export async function api<T = unknown>(
 }
 
 /**
+ * Multipart upload helper. {@link api} forces `Content-Type: application/json`
+ * on any body, which breaks FormData (the browser needs to set the multipart
+ * boundary itself). This bypasses that path while still attaching the bearer.
+ */
+export async function apiUpload<T = unknown>(
+  path: string,
+  form: FormData,
+): Promise<T> {
+  const headers = new Headers();
+  if (accessToken) headers.set('Authorization', `Bearer ${accessToken}`);
+  const res = await fetch(`${BASE}${path}`, { method: 'POST', body: form, headers });
+  if (res.status === 204) return undefined as T;
+  const body = (await res.json().catch(() => null)) as unknown;
+  if (!res.ok) {
+    if (res.status === 401 && onAuthLost) onAuthLost();
+    const fromBody =
+      body && typeof body === 'object' && 'message' in body
+        ? String((body as { message: unknown }).message)
+        : null;
+    throw new ApiError(res.status, fromBody ?? res.statusText, body);
+  }
+  return body as T;
+}
+
+/**
  * Downloads the response body as a Blob, then triggers a browser download
  * with the given filename. Honours the bearer token like {@link api} so
  * authenticated endpoints work without juggling localStorage tokens.

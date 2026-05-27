@@ -4,6 +4,7 @@ import { FastifyAdapter, NestFastifyApplication } from '@nestjs/platform-fastify
 import { ValidationPipe, Logger } from '@nestjs/common';
 import helmet from '@fastify/helmet';
 import cookie from '@fastify/cookie';
+import multipart from '@fastify/multipart';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
@@ -20,6 +21,12 @@ async function bootstrap() {
   });
   await app.register(cookie, {
     secret: process.env.JWT_SECRET ?? 'change-me',
+  });
+  // Multipart for Pix-receipt uploads. Single file cap matches the
+  // PixFallbackService 5MB ceiling — Fastify rejects oversized bodies
+  // before they reach the controller.
+  await app.register(multipart, {
+    limits: { fileSize: 5 * 1024 * 1024, files: 1 },
   });
 
   app.setGlobalPrefix('api/v1');

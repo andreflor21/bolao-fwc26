@@ -22,6 +22,14 @@ enum SubscriptionStatus {
   refunded
 }
 
+enum PixReceiptStatus {
+  none
+  analyzing
+  auto_confirmed
+  manual_review
+  rejected
+}
+
 enum ClosureStatus {
   open
   locked
@@ -177,6 +185,10 @@ model Subscription {
   refundedAt               DateTime?          @map("refunded_at")
   refundedAmountCents      Int?               @map("refunded_amount_cents")
   stripeRefundId           String?            @map("stripe_refund_id")
+  pixReceiptStatus         PixReceiptStatus   @default(none) @map("pix_receipt_status")
+  pixReceiptUploadedAt     DateTime?          @map("pix_receipt_uploaded_at")
+  pixReceiptVerdict        Json?              @map("pix_receipt_verdict")
+  pixReceiptNotes          String?            @map("pix_receipt_notes")
   createdAt                DateTime           @default(now()) @map("created_at")
   updatedAt                DateTime           @updatedAt @map("updated_at")
 

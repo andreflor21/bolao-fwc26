@@ -5,6 +5,8 @@ import type { StripeApi } from './drivers/stripe-types';
 import { PaymentController } from './payment.controller';
 import { WebhookController } from './webhook.controller';
 import { PaymentService } from './payment.service';
+import { PixFallbackService } from './pix-fallback.service';
+import { PixFallbackController } from './pix-fallback.controller';
 import { ReconciliationCron } from './reconciliation.cron';
 import { MockPaymentDriver } from './drivers/mock-payment.driver';
 import { StripePaymentDriver } from './drivers/stripe-payment.driver';
@@ -42,8 +44,8 @@ const paymentDriverProvider: Provider = {
 };
 
 @Module({
-  controllers: [PaymentController, WebhookController],
-  providers: [PaymentService, ReconciliationCron, paymentDriverProvider],
-  exports: [PaymentService, PAYMENT_DRIVER],
+  controllers: [PaymentController, WebhookController, PixFallbackController],
+  providers: [PaymentService, PixFallbackService, ReconciliationCron, paymentDriverProvider],
+  exports: [PaymentService, PixFallbackService, PAYMENT_DRIVER],
 })
 export class PaymentModule {}
