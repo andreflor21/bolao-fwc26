@@ -18,7 +18,10 @@ import { JwtAuthGuard } from './guards/jwt-auth.guard';
       useFactory: (config: ConfigService) => ({
         secret: config.getOrThrow<string>('JWT_SECRET'),
         signOptions: {
-          expiresIn: config.get<string>('JWT_ACCESS_TTL') ?? '15m',
+          // @nestjs/jwt v11 narrowed expiresIn to `number | ms.StringValue`.
+          // The config value is a duration string ('15m', '1h', '7d') — runtime
+          // accepts it but TS can't prove the template-literal match.
+          expiresIn: (config.get<string>('JWT_ACCESS_TTL') ?? '15m') as `${number}${'s' | 'm' | 'h' | 'd'}`,
         },
       }),
     }),

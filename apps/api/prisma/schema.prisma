@@ -1,11 +1,13 @@
 // Bolão Copa do Mundo FIFA 2026 — Schema completo do MVP
+//
+// Prisma 7+: a URL de conexão vive em ../prisma.config.ts (Migrate) e o
+// PrismaClient recebe um driver adapter no PrismaService (runtime).
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
 }
 
 enum UserRole {
