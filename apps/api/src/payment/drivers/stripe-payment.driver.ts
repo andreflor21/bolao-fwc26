@@ -106,6 +106,10 @@ export class StripePaymentDriver implements IPaymentDriver {
           success_url: input.successUrl,
           cancel_url: input.cancelUrl,
           client_reference_id: input.clientReferenceId,
+          // customer_email + 'link' in payment_method_types lets Stripe Link
+          // identify returning customers from a prior Link purchase on any
+          // Stripe merchant and offer one-click checkout.
+          ...(input.customerEmail ? { customer_email: input.customerEmail } : {}),
           metadata: {
             userId: input.userId,
             ...(input.metadata ?? {}),

@@ -86,6 +86,12 @@ export interface CreateCheckoutSessionInput {
   methods: PaymentMethodKey[];
   /** Days the boleto stays open. Ignored when 'boleto' is not in methods. */
   boletoExpiresAfterDays?: number;
+  /**
+   * Prefills the email on the hosted page. Required for Stripe Link to
+   * recognise returning users and offer one-click prefill — without it,
+   * Link only appears as "save for next time" on the success page.
+   */
+  customerEmail?: string;
   metadata?: Record<string, string>;
   /**
    * Stable reference so we can correlate the webhook back to our DB row.

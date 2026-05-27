@@ -37,8 +37,9 @@ describe('PaymentService', () => {
       findUnique: jest.Mock;
       create: jest.Mock;
       update: jest.Mock;
+      updateMany: jest.Mock;
     };
-    user: { update: jest.Mock };
+    user: { update: jest.Mock; findUnique: jest.Mock };
     processedWebhookEvent: { create: jest.Mock };
     $transaction: jest.Mock;
   };
@@ -115,8 +116,34 @@ describe('PaymentService', () => {
             return updated;
           },
         ),
+        updateMany: jest.fn(
+          async ({
+            where,
+            data,
+          }: {
+            where: { stripeCheckoutSessionId?: string; status?: string };
+            data: Partial<FakeSubscription>;
+          }) => {
+            let count = 0;
+            for (const [id, sub] of subState) {
+              if (
+                where.stripeCheckoutSessionId &&
+                sub.stripeCheckoutSessionId !== where.stripeCheckoutSessionId
+              ) {
+                continue;
+              }
+              if (where.status && sub.status !== where.status) continue;
+              subState.set(id, { ...sub, ...data });
+              count++;
+            }
+            return { count };
+          },
+        ),
       },
-      user: { update: jest.fn(async () => ({})) },
+      user: {
+        update: jest.fn(async () => ({})),
+        findUnique: jest.fn(async () => ({ email: 'user@example.com' })),
+      },
       processedWebhookEvent: {
         create: jest.fn(async () => ({ id: 'evt' })),
       },
@@ -157,6 +184,15 @@ describe('PaymentService', () => {
       const sub = [...subState.values()][0]!;
       expect(sub.stripeCheckoutSessionId).toBe(out.sessionId);
       expect(sub.stripePaymentIntentId).toMatch(/^mock_pi_/);
+    });
+
+    it('forwards the user email to the driver so Stripe Link can prefill', async () => {
+      prisma.user.findUnique.mockResolvedValueOnce({ email: 'link-user@example.com' });
+      const spy = jest.spyOn(driver, 'createCheckoutSession');
+      await service.createOrGetCheckoutSession('user-1');
+      expect(spy).toHaveBeenCalledWith(
+        expect.objectContaining({ customerEmail: 'link-user@example.com' }),
+      );
     });
 
     it('reuses an unexpired open session on a second call', async () => {
@@ -462,6 +498,93 @@ describe('PaymentService', () => {
       const result = await service.handleWebhookEvent(event);
       expect(result.handled).toBe(false);
       expect(result.reason).toBe('no_payment_intent');
+    });
+
+    it('handles checkout.session.async_payment_succeeded (boleto paid at bank)', async () => {
+      const session = await driver.createCheckoutSession({
+        userId: 'user-1',
+        amountCents: 5000,
+        description: 'x',
+        successUrl: 'http://localhost:5173/pay/success',
+        cancelUrl: 'http://localhost:5173/pay/cancel',
+        methods: ['boleto'],
+      });
+      subState.set('sub1', {
+        id: 'sub1',
+        userId: 'user-1',
+        competitionId: 'fifa-wc-2026',
+        status: 'pending_payment',
+        amountCents: 5000,
+        stripePaymentIntentId: session.paymentIntentId,
+        stripeCheckoutSessionId: session.sessionId,
+        checkoutSessionExpiresAt: null,
+        paidAt: null,
+        refundedAt: null,
+        user: { email: 'a@b.com', name: 'Ana' },
+      });
+      const event: WebhookEvent = {
+        id: 'evt-async-ok',
+        type: 'checkout.session.async_payment_succeeded',
+        paymentIntent: null,
+        paymentIntentId: session.paymentIntentId,
+        checkoutSessionId: session.sessionId,
+      };
+      const result = await service.handleWebhookEvent(event);
+      expect(result.handled).toBe(true);
+      expect(subState.get('sub1')!.status).toBe('active');
+    });
+
+    it('handles checkout.session.async_payment_failed (boleto expired)', async () => {
+      subState.set('sub1', {
+        id: 'sub1',
+        userId: 'user-1',
+        competitionId: 'fifa-wc-2026',
+        status: 'pending_payment',
+        amountCents: 5000,
+        stripePaymentIntentId: 'mock_pi_boleto',
+        stripeCheckoutSessionId: 'mock_cs_boleto',
+        checkoutSessionExpiresAt: null,
+        paidAt: null,
+        refundedAt: null,
+      });
+      const event: WebhookEvent = {
+        id: 'evt-async-fail',
+        type: 'checkout.session.async_payment_failed',
+        paymentIntent: null,
+        paymentIntentId: 'mock_pi_boleto',
+        checkoutSessionId: 'mock_cs_boleto',
+      };
+      const result = await service.handleWebhookEvent(event);
+      expect(result.handled).toBe(true);
+      // markPaymentFailed only logs — subscription stays pending so a retry is possible.
+      expect(subState.get('sub1')!.status).toBe('pending_payment');
+    });
+
+    it('handles checkout.session.expired by clearing the stale session id', async () => {
+      subState.set('sub1', {
+        id: 'sub1',
+        userId: 'user-1',
+        competitionId: 'fifa-wc-2026',
+        status: 'pending_payment',
+        amountCents: 5000,
+        stripePaymentIntentId: null,
+        stripeCheckoutSessionId: 'mock_cs_expired',
+        checkoutSessionExpiresAt: new Date(Date.now() - 60_000),
+        paidAt: null,
+        refundedAt: null,
+      });
+      const event: WebhookEvent = {
+        id: 'evt-expired',
+        type: 'checkout.session.expired',
+        paymentIntent: null,
+        paymentIntentId: null,
+        checkoutSessionId: 'mock_cs_expired',
+      };
+      const result = await service.handleWebhookEvent(event);
+      expect(result.handled).toBe(true);
+      const sub = subState.get('sub1')!;
+      expect(sub.stripeCheckoutSessionId).toBeNull();
+      expect(sub.checkoutSessionExpiresAt).toBeNull();
     });
 
     it('handles payment_intent.canceled by no-op when subscription is pending', async () => {
