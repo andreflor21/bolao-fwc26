@@ -72,6 +72,22 @@ class EnvVars {
 
   @IsOptional()
   @IsString()
+  SMTP_HOST?: string;
+
+  @IsOptional()
+  @IsInt()
+  SMTP_PORT?: number;
+
+  @IsOptional()
+  @IsString()
+  SMTP_USER?: string;
+
+  @IsOptional()
+  @IsString()
+  SMTP_PASSWORD?: string;
+
+  @IsOptional()
+  @IsString()
   STRIPE_DRIVER?: string;
 
   @IsOptional()
