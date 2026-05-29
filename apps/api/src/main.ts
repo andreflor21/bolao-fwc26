@@ -48,6 +48,11 @@ async function bootstrap() {
   app.enableCors({
     origin: webOrigin.split(',').map((s) => s.trim()),
     credentials: true,
+    // Sem isto o @fastify/cors só libera os métodos "safelisted"
+    // (GET/HEAD/POST) no preflight, e os PUT (auto-save de palpites,
+    // knockout-scores, manual-tiebreak) são bloqueados pelo navegador.
+    methods: ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Authorization', 'Content-Type'],
   });
 
   const port = Number(process.env.API_PORT ?? 3001);
