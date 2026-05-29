@@ -1,7 +1,9 @@
+import './instrument'; // Sentry.init — DEVE ser o primeiro import
 import 'reflect-metadata';
 import { NestFactory } from '@nestjs/core';
 import { FastifyAdapter, NestFastifyApplication } from '@nestjs/platform-fastify';
-import { ValidationPipe, Logger } from '@nestjs/common';
+import { ValidationPipe } from '@nestjs/common';
+import { Logger } from 'nestjs-pino';
 import helmet from '@fastify/helmet';
 import cookie from '@fastify/cookie';
 import multipart from '@fastify/multipart';
@@ -15,6 +17,9 @@ async function bootstrap() {
     new FastifyAdapter({ logger: false, trustProxy: true }),
     { bufferLogs: true, rawBody: true },
   );
+
+  // Pino como logger da aplicação (logs estruturados + x-request-id).
+  app.useLogger(app.get(Logger));
 
   await app.register(helmet, {
     contentSecurityPolicy: false,
@@ -49,7 +54,7 @@ async function bootstrap() {
   const host = process.env.API_HOST ?? '0.0.0.0';
   await app.listen(port, host);
 
-  Logger.log(`🚀 API ready at http://${host}:${port}/api/v1`, 'Bootstrap');
+  app.get(Logger).log(`🚀 API ready at http://${host}:${port}/api/v1`);
 }
 
 bootstrap().catch((err) => {
