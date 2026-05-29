@@ -11,6 +11,7 @@ import type Redis from 'ioredis';
 import { PrismaService } from '../prisma/prisma.service';
 import { RankingService } from '../ranking/ranking.service';
 import { PrizeService } from '../prize/prize.service';
+import { EmailService } from '../email/email.service';
 import { REDIS_CLIENT } from '../redis/redis.tokens';
 import {
   FIFA_WC_2026_ID,
@@ -49,6 +50,7 @@ export class AdminClosureService {
     private readonly prisma: PrismaService,
     private readonly ranking: RankingService,
     private readonly prize: PrizeService,
+    private readonly email: EmailService,
     @Inject(REDIS_CLIENT) private readonly redis: Redis,
   ) {}
 
@@ -183,7 +185,30 @@ export class AdminClosureService {
       )}c distributed.`,
     );
 
-    return this.buildSnapshot();
+    const snapshot = await this.buildSnapshot();
+    // E-mail "você foi premiado" — best-effort: falha de e-mail NUNCA derruba
+    // o fechamento (que é irreversível e já foi persistido).
+    await this.notifyWinners(snapshot.payouts);
+    return snapshot;
+  }
+
+  /** Envia o e-mail de premiação a cada payout com destinatário. Best-effort. */
+  private async notifyWinners(payouts: ClosureSnapshotDto['payouts']): Promise<void> {
+    for (const p of payouts) {
+      if (!p.user?.email) continue;
+      try {
+        await this.email.sendPrizeAwarded(
+          p.user.email,
+          p.user.name,
+          p.categoryLabel,
+          p.amountCents,
+        );
+      } catch (e) {
+        this.logger.warn(
+          `Falha ao enviar e-mail de premiação para ${p.user.email}: ${(e as Error).message}`,
+        );
+      }
+    }
   }
 
   /**
@@ -274,7 +299,26 @@ export class AdminClosureService {
       },
     });
     this.logger.log(`Payout ${payoutId} marked paid by admin ${adminId}`);
-    return this.formatPayoutRow(payoutId);
+
+    const row = await this.formatPayoutRow(payoutId);
+    // E-mail "prêmio pago — confirme o recebimento". Best-effort.
+    if (row.user?.email) {
+      try {
+        await this.email.sendPrizePaid(
+          row.user.email,
+          row.user.name,
+          row.categoryLabel,
+          row.amountCents,
+          row.user.pixKey,
+          row.paymentReference,
+        );
+      } catch (e) {
+        this.logger.warn(
+          `Falha ao enviar e-mail de prêmio pago para ${row.user.email}: ${(e as Error).message}`,
+        );
+      }
+    }
+    return row;
   }
 
   private async formatPayoutRow(payoutId: string): Promise<ClosureSnapshotDto['payouts'][number]> {
