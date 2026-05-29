@@ -51,6 +51,14 @@ const DEFAULT_METHODS: PaymentMethodKey[] = ['card', 'link', 'boleto'];
 export class PaymentService {
   private readonly logger = new Logger(PaymentService.name);
   private readonly amountCents: number;
+  /**
+   * Sobretaxa (em centavos) somada SÓ ao valor cobrado no Stripe Checkout para
+   * cobrir a taxa da operação (cartão 3,99%+R$0,39 / boleto R$3,45 fixo). NÃO
+   * entra no `amountCents` da inscrição — o pool/prêmio continua no líquido.
+   * Valor único para todos os métodos; use o pior caso (boleto = 345) para
+   * garantir que o líquido nunca fique abaixo do valor da inscrição.
+   */
+  private readonly surchargeCents: number;
   private readonly methods: PaymentMethodKey[];
   private readonly boletoExpiresAfterDays: number;
   private readonly webOrigin: string;
@@ -64,6 +72,7 @@ export class PaymentService {
     config: ConfigService,
   ) {
     this.amountCents = Number(config.get('SUBSCRIPTION_AMOUNT_CENTS') ?? 5000);
+    this.surchargeCents = Number(config.get('SUBSCRIPTION_SURCHARGE_CENTS') ?? 0);
     this.boletoExpiresAfterDays = Number(config.get('STRIPE_BOLETO_EXPIRES_AFTER_DAYS') ?? 3);
     this.webOrigin = config.get<string>('WEB_ORIGIN') ?? 'http://localhost:5173';
     // Manual-Pix fallback feature flag — surfaced on the create-session
@@ -83,7 +92,12 @@ export class PaymentService {
     } else {
       this.methods = DEFAULT_METHODS;
     }
-    this.logger.log(`Checkout methods: ${this.methods.join(', ')}`);
+    this.logger.log(
+      `Checkout methods: ${this.methods.join(', ')}` +
+        (this.surchargeCents > 0
+          ? ` | surcharge: ${this.surchargeCents}c (cobrado ${this.amountCents + this.surchargeCents}c, pool ${this.amountCents}c)`
+          : ''),
+    );
   }
 
   /**
@@ -154,7 +168,9 @@ export class PaymentService {
 
     const session = await this.driver.createCheckoutSession({
       userId,
-      amountCents: subscription.amountCents,
+      // Cobra o bruto (líquido + sobretaxa da operação). O `subscription.amountCents`
+      // permanece líquido — é ele que alimenta o pool/prêmio.
+      amountCents: subscription.amountCents + this.surchargeCents,
       description: 'Inscrição Bolão Copa do Mundo FIFA 2026',
       successUrl: `${this.webOrigin}/pay/success?sid={CHECKOUT_SESSION_ID}`,
       cancelUrl: `${this.webOrigin}/pay/cancel`,

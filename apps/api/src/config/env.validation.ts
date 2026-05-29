@@ -107,6 +107,10 @@ class EnvVars {
   SUBSCRIPTION_AMOUNT_CENTS?: number;
 
   @IsOptional()
+  @IsInt()
+  SUBSCRIPTION_SURCHARGE_CENTS?: number;
+
+  @IsOptional()
   @IsString()
   VAPID_PUBLIC_KEY?: string;
 
