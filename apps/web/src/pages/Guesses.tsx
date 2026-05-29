@@ -221,13 +221,13 @@ export function Guesses() {
       })}
 
       <div className="fixed bottom-0 inset-x-0 z-20 border-t border-emerald-500/20 bg-midnight-900/90 backdrop-blur-md">
-        <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
-          <div className="text-xs text-emerald-200/70">
+        <div className="max-w-6xl mx-auto px-4 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-3">
+          <div className="text-xs text-emerald-200/70 text-center sm:text-left">
             {isLocked
               ? '🔒 Janela fechada — palpites travados'
               : `Você preencheu ${filledCount}/72. Depois de submeter, não dá pra editar mais.`}
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-col sm:flex-row items-stretch gap-2 shrink-0">
             <Link to="/bracket" className="btn-secondary text-sm">
               Pré-visualizar chaveamento
             </Link>

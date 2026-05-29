@@ -75,7 +75,7 @@ export function MatchCard({ match, guess, onChange, readOnly }: Props) {
             value={home}
             disabled={readOnly}
             onChange={(e) => onChange?.(clamp(e.target.value), guess?.awayGoals ?? 0)}
-            className="w-12 rounded-lg border border-emerald-500/30 bg-midnight-800 px-2 py-1.5 text-center font-display text-lg text-white outline-none focus:border-gold-400/70 focus:ring-2 focus:ring-gold-400/30 disabled:opacity-60"
+            className="w-14 h-12 rounded-lg border border-emerald-500/30 bg-midnight-800 px-2 text-center font-display text-xl text-white outline-none focus:border-gold-400/70 focus:ring-2 focus:ring-gold-400/30 disabled:opacity-60"
             aria-label="Gols do mandante"
           />
           <span className="text-emerald-300/40 font-bold">×</span>
@@ -87,7 +87,7 @@ export function MatchCard({ match, guess, onChange, readOnly }: Props) {
             value={away}
             disabled={readOnly}
             onChange={(e) => onChange?.(guess?.homeGoals ?? 0, clamp(e.target.value))}
-            className="w-12 rounded-lg border border-emerald-500/30 bg-midnight-800 px-2 py-1.5 text-center font-display text-lg text-white outline-none focus:border-gold-400/70 focus:ring-2 focus:ring-gold-400/30 disabled:opacity-60"
+            className="w-14 h-12 rounded-lg border border-emerald-500/30 bg-midnight-800 px-2 text-center font-display text-xl text-white outline-none focus:border-gold-400/70 focus:ring-2 focus:ring-gold-400/30 disabled:opacity-60"
             aria-label="Gols do visitante"
           />
         </div>
