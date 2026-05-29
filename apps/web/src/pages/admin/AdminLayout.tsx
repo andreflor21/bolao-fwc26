@@ -19,8 +19,8 @@ function AdminLayout() {
   return (
     <div className="grid lg:grid-cols-[220px,1fr] gap-6">
       <aside className="lg:sticky lg:top-24 lg:self-start">
-        <div className="card-glow !p-4 space-y-1 border-gold-400/30 bg-gradient-to-br from-midnight-800/90 to-midnight-900/90">
-          <p className="text-[10px] tracking-[0.3em] text-gold-300/80 mb-2 px-2">
+        <div className="card-glow !p-2 lg:!p-4 flex flex-row gap-1 overflow-x-auto lg:flex-col lg:space-y-1 border-gold-400/30 bg-gradient-to-br from-midnight-800/90 to-midnight-900/90">
+          <p className="hidden lg:block text-[10px] tracking-[0.3em] text-gold-300/80 mb-2 px-2">
             PAINEL ADMIN
           </p>
           <SidebarLink to="/admin/matches" label="Resultados" icon="📊" />
@@ -42,7 +42,7 @@ function SidebarLink({ to, label, icon }: { to: string; label: string; icon: str
       to={to}
       end
       className={({ isActive }) =>
-        'flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold transition ' +
+        'flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold transition shrink-0 whitespace-nowrap ' +
         (isActive
           ? 'bg-gold-400/20 text-gold-100 ring-1 ring-gold-400/40'
           : 'text-emerald-100/85 hover:bg-emerald-500/10 hover:text-white')
