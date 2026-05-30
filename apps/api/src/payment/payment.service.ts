@@ -26,7 +26,12 @@ export interface CreateCheckoutSessionResponse {
   /** Hosted checkout URL — frontend redirects the browser to this. */
   checkoutUrl: string;
   expiresAt: string;
+  /** Total cobrado no checkout (líquido + sobretaxa). */
   amountCents: number;
+  /** Valor da inscrição (líquido, o que vai pro pool). */
+  baseAmountCents: number;
+  /** Sobretaxa da operação (cobre a taxa da Stripe). 0 se não configurada. */
+  surchargeCents: number;
   /** Subscription status from our DB — the source of truth post-webhook. */
   subscriptionStatus: 'pending_payment' | 'active' | 'refunded';
   /** ISO list of methods enabled for this session (shown in UI as a heads-up). */
@@ -531,7 +536,9 @@ export class PaymentService {
       sessionId: session.sessionId,
       checkoutUrl: session.url,
       expiresAt: session.expiresAt,
-      amountCents: session.amountCents || this.amountCents,
+      amountCents: session.amountCents || this.amountCents + this.surchargeCents,
+      baseAmountCents: this.amountCents,
+      surchargeCents: this.surchargeCents,
       subscriptionStatus,
       methods: this.methods,
       pixFallbackEnabled: this.pixFallbackEnabled,

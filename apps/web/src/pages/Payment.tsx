@@ -8,17 +8,19 @@ interface CreateSessionResponse {
   checkoutUrl: string;
   expiresAt: string;
   amountCents: number;
+  baseAmountCents: number;
+  surchargeCents: number;
   subscriptionStatus: 'pending_payment' | 'active' | 'refunded';
   methods: Array<'card' | 'link' | 'boleto' | 'pix' | 'apple_pay'>;
   pixFallbackEnabled: boolean;
 }
 
 const METHOD_LABEL: Record<string, string> = {
-  card: 'Cartão (crédito/débito)',
-  link: 'Link (autofill Stripe)',
-  boleto: 'Boleto bancário',
-  pix: 'Pix',
-  apple_pay: 'Apple Pay',
+  card: '💳 Cartão',
+  link: '🔗 Link',
+  boleto: '🧾 Boleto',
+  pix: '📱 Pix',
+  apple_pay: ' Apple Pay',
 };
 
 function formatBRL(cents: number): string {
@@ -50,6 +52,8 @@ export function Payment() {
   // the same session (idempotent), so no waste.
   const [methods, setMethods] = useState<CreateSessionResponse['methods']>([]);
   const [amountCents, setAmountCents] = useState<number | null>(null);
+  const [baseAmountCents, setBaseAmountCents] = useState<number | null>(null);
+  const [surchargeCents, setSurchargeCents] = useState(0);
   const [pixFallback, setPixFallback] = useState(false);
   useEffect(() => {
     let cancelled = false;
@@ -58,6 +62,8 @@ export function Payment() {
         if (cancelled) return;
         setMethods(data.methods);
         setAmountCents(data.amountCents);
+        setBaseAmountCents(data.baseAmountCents);
+        setSurchargeCents(data.surchargeCents);
         setPixFallback(data.pixFallbackEnabled);
       })
       .catch((e: unknown) => {
@@ -80,8 +86,8 @@ export function Payment() {
           <span className="text-shimmer">PAGAMENTO</span>
         </h1>
         <p className="text-sm text-emerald-200/70 mt-2">
-          {amountCents
-            ? `Pague ${formatBRL(amountCents)} para ativar sua inscrição. Você será levado ao checkout seguro da Stripe.`
+          {baseAmountCents
+            ? `Pague ${formatBRL(baseAmountCents)}${surchargeCents > 0 ? ' + taxa de processamento' : ''} para ativar sua inscrição. Você será levado ao checkout seguro da Stripe.`
             : 'Carregando opções de pagamento...'}
         </p>
       </header>
@@ -129,8 +135,13 @@ export function Payment() {
           >
             {createSession.isPending
               ? 'Abrindo checkout...'
-              : `💳 Pagar agora${amountCents ? ` — ${formatBRL(amountCents)}` : ''}`}
+              : `💳 Pagar agora${baseAmountCents ? ` — ${formatBRL(baseAmountCents)}${surchargeCents > 0 ? ' + taxa' : ''}` : ''}`}
           </button>
+          {surchargeCents > 0 && amountCents && baseAmountCents && (
+            <p className="text-[11px] text-emerald-200/60 mt-2">
+              Total no checkout: <strong>{formatBRL(amountCents)}</strong> ({formatBRL(baseAmountCents)} de inscrição + {formatBRL(surchargeCents)} de taxa de processamento).
+            </p>
+          )}
           <p className="text-[11px] text-emerald-200/50 mt-2">
             Você será redirecionado para a página segura da Stripe. Após confirmar o
             pagamento, voltará automaticamente para o app.
