@@ -14,8 +14,11 @@ const uniq = process.env.E2E_RUN_ID ?? `${Date.now()}`;
 const email = `e2e-${uniq}@bolao.test`;
 const password = 'SenhaForte!2026';
 
+// Só Authorization. NÃO forçamos Content-Type: o Fastify rejeita POST com
+// content-type JSON + body vazio (ex: mock-confirm sem body) → 400. O Playwright
+// já seta o content-type automaticamente quando passamos `data`.
 function auth(token: string) {
-  return { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+  return { Authorization: `Bearer ${token}` };
 }
 
 async function promoteToAdmin(userId: string): Promise<void> {
