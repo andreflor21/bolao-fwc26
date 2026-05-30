@@ -4,6 +4,8 @@ module.exports = {
   rootDir: '.',
   moduleFileExtensions: ['ts', 'js', 'json'],
   testRegex: '.*\\.(spec|test)\\.ts$',
+  // E2E roda no Playwright (test/e2e), não no Jest.
+  testPathIgnorePatterns: ['/node_modules/', '/test/e2e/'],
   transform: {
     '^.+\\.ts$': ['ts-jest', { tsconfig: 'tsconfig.json' }],
   },
