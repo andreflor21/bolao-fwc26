@@ -16,7 +16,12 @@ interface AuthContextValue {
   effectiveRole: UserRole;
   toggleAdminView: () => void;
   login: (email: string, password: string) => Promise<void>;
-  register: (email: string, password: string, name: string) => Promise<void>;
+  register: (
+    email: string,
+    password: string,
+    name: string,
+    extras?: { whatsapp?: string; whatsappGroupOptIn?: boolean },
+  ) => Promise<void>;
   logout: () => Promise<void>;
   refreshMe: () => Promise<void>;
 }
@@ -111,10 +116,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(res.user);
   }, []);
 
-  const register = useCallback(async (email: string, password: string, name: string) => {
+  const register = useCallback(
+    async (
+      email: string,
+      password: string,
+      name: string,
+      extras?: { whatsapp?: string; whatsappGroupOptIn?: boolean },
+    ) => {
     const res = await api<{ user: UserDto; tokens: AuthTokensDto }>('/auth/register', {
       method: 'POST',
-      body: JSON.stringify({ email, password, name }),
+      body: JSON.stringify({ email, password, name, ...extras }),
     });
     saveTokens(res.tokens);
     setAccessToken(res.tokens.accessToken);

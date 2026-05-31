@@ -1,8 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
+import type { MatchDto } from '@bolao/shared';
 import { api } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { PushConsentBanner } from '../components/PushConsentBanner';
+import { flagUrl } from '../lib/flags';
 
 type SubscriptionStatus = {
   id?: string;
@@ -11,11 +13,35 @@ type SubscriptionStatus = {
   paidAt?: string | null;
 };
 
+// Janela "ao vivo": começou e ainda não tem resultado oficial, dentro de 2,5h.
+const LIVE_WINDOW_MS = 150 * 60 * 1000;
+
+const BRT_TIME = new Intl.DateTimeFormat('pt-BR', {
+  hour: '2-digit',
+  minute: '2-digit',
+  timeZone: 'America/Sao_Paulo',
+});
+
 export function Dashboard() {
   const { user } = useAuth();
   const { data, isLoading } = useQuery({
     queryKey: ['subscription-status'],
     queryFn: () => api<SubscriptionStatus>('/subscription/status'),
+  });
+  // Jogos ao vivo — refetch a cada 60s pra atualizar sozinho.
+  const { data: matches } = useQuery({
+    queryKey: ['matches-group-stage'],
+    queryFn: () => api<MatchDto[]>('/matches/group-stage'),
+    refetchInterval: 60_000,
+  });
+  const now = Date.now();
+  const liveMatches = (matches ?? []).filter((m) => {
+    const kickoff = new Date(m.kickoffAt).getTime();
+    return (
+      m.homeGoalsOfficial === null &&
+      kickoff <= now &&
+      now <= kickoff + LIVE_WINDOW_MS
+    );
   });
 
   if (isLoading) return <p className="text-emerald-200/70">Carregando...</p>;
@@ -101,18 +127,57 @@ export function Dashboard() {
 
       <section className="card">
         <div className="flex items-center gap-3 mb-4">
-          <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-emerald-400 to-emerald-700 grid place-items-center text-white text-xl shadow-md">
-            🗓️
+          <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-red-500 to-red-700 grid place-items-center text-white text-xl shadow-md">
+            {liveMatches.length > 0 ? '🔴' : '⚽'}
           </div>
-          <h2 className="font-display text-2xl tracking-wider text-white">ROADMAP DO MVP</h2>
+          <h2 className="font-display text-2xl tracking-wider text-white">JOGOS AO VIVO</h2>
+          {liveMatches.length > 0 && (
+            <span className="ml-auto inline-flex items-center gap-1.5 text-xs font-bold text-red-300">
+              <span className="h-2 w-2 rounded-full bg-red-500 animate-pulse" />
+              {liveMatches.length} agora
+            </span>
+          )}
         </div>
-        <ul className="mt-3 text-sm space-y-3">
-          <RoadmapItem sprint="2" text="Tela de palpites de fase de grupos + Bracket Engine." />
-          <RoadmapItem sprint="3" text="Integração Stripe real, ranking ao vivo, painel de prêmios." />
-          <RoadmapItem sprint="4" text="Notificações por e-mail e push, polish, soft launch." />
-        </ul>
+        {liveMatches.length === 0 ? (
+          <p className="text-sm text-emerald-200/60">
+            Nenhum jogo acontecendo agora. Volte na hora dos jogos! ⚽
+          </p>
+        ) : (
+          <ul className="space-y-2">
+            {liveMatches.map((m) => (
+              <LiveMatchRow key={m.id} match={m} />
+            ))}
+          </ul>
+        )}
       </section>
     </div>
+  );
+}
+
+function LiveMatchRow({ match }: { match: MatchDto }) {
+  const home = flagUrl(match.homeTeamCode);
+  const away = flagUrl(match.awayTeamCode);
+  return (
+    <li className="flex items-center gap-3 p-3 rounded-xl border border-red-500/20 bg-red-900/10">
+      <span className="inline-flex items-center gap-1 text-[10px] font-bold text-red-300 shrink-0">
+        <span className="h-2 w-2 rounded-full bg-red-500 animate-pulse" />
+        AO VIVO
+      </span>
+      <div className="flex items-center gap-2 flex-1 min-w-0 justify-center">
+        {home && <img src={home} alt="" className="w-6 h-4 rounded-sm object-cover shrink-0" />}
+        <span className="text-sm text-emerald-50 truncate">
+          {match.homeTeamName ?? match.homeTeamCode}
+        </span>
+        <span className="text-emerald-300/50 text-xs px-1">×</span>
+        <span className="text-sm text-emerald-50 truncate">
+          {match.awayTeamName ?? match.awayTeamCode}
+        </span>
+        {away && <img src={away} alt="" className="w-6 h-4 rounded-sm object-cover shrink-0" />}
+      </div>
+      <span className="text-[11px] text-emerald-200/50 shrink-0">
+        início {BRT_TIME.format(new Date(match.kickoffAt))}
+      </span>
+    </li>
   );
 }
 
@@ -142,16 +207,5 @@ function StatusBadge({ status }: { status: SubscriptionStatus['status'] }) {
     >
       {label}
     </span>
-  );
-}
-
-function RoadmapItem({ sprint, text }: { sprint: string; text: string }) {
-  return (
-    <li className="flex items-start gap-3 p-3 rounded-xl border border-emerald-500/10 bg-emerald-900/15">
-      <span className="shrink-0 h-7 w-7 rounded-lg bg-gold-500/20 border border-gold-400/30 grid place-items-center text-xs font-bold text-gold-300">
-        S{sprint}
-      </span>
-      <span className="text-emerald-100/85">{text}</span>
-    </li>
   );
 }

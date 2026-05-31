@@ -154,6 +154,14 @@ export function Layout({ children }: { children: React.ReactNode }) {
             <Trophy className="h-7 w-auto opacity-90" />
             <span>Bolão recreativo entre amigos — Copa do Mundo FIFA 2026</span>
           </div>
+          <nav className="flex items-center gap-4">
+            <Link to="/privacy" className="hover:text-emerald-100 transition">
+              Privacidade
+            </Link>
+            <Link to="/terms" className="hover:text-emerald-100 transition">
+              Termos
+            </Link>
+          </nav>
           <p>
             Palpites travam às <span className="text-gold-300 font-semibold">16:00 (BRT) de 11/06/2026</span>
           </p>
