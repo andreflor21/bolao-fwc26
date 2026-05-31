@@ -68,6 +68,8 @@ export class AuthService {
         passwordHash,
         name: dto.name.trim(),
         role: 'player',
+        whatsapp: dto.whatsapp?.trim() || null,
+        whatsappGroupOptIn: dto.whatsappGroupOptIn ?? false,
       },
       select: { id: true, email: true, name: true, role: true, createdAt: true },
     });
