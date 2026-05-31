@@ -120,7 +120,11 @@ export function Dashboard() {
         )}
         {status === 'refunded' && (
           <p className="mt-3 text-sm text-emerald-100/70 bg-slate-700/30 border border-slate-500/30 rounded-xl p-4">
-            Sua inscrição foi reembolsada. Entre em contato com o admin se isso foi inesperado.
+            Sua inscrição foi reembolsada. Se isso foi inesperado, fale com o organizador:{' '}
+            <a className="link-accent" href="mailto:contato@af-solutions.dev">
+              contato@af-solutions.dev
+            </a>
+            .
           </p>
         )}
       </section>

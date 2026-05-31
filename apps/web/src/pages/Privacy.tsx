@@ -51,7 +51,13 @@ export function Privacy() {
         </p>
 
         <h2 className="text-gold-200 font-semibold text-base pt-2">Contato</h2>
-        <p>Dúvidas sobre privacidade: fale com o organizador do bolão.</p>
+        <p>
+          Dúvidas sobre privacidade ou solicitações sobre seus dados:{' '}
+          <a className="link-accent" href="mailto:contato@af-solutions.dev">
+            contato@af-solutions.dev
+          </a>
+          .
+        </p>
       </section>
     </div>
   );

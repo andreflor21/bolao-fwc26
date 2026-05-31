@@ -43,7 +43,13 @@ export function Terms() {
         </p>
 
         <h2 className="text-gold-200 font-semibold text-base pt-2">Contato</h2>
-        <p>Dúvidas sobre os termos: fale com o organizador do bolão.</p>
+        <p>
+          Dúvidas sobre os termos, pagamentos ou reembolsos:{' '}
+          <a className="link-accent" href="mailto:contato@af-solutions.dev">
+            contato@af-solutions.dev
+          </a>
+          .
+        </p>
       </section>
     </div>
   );
