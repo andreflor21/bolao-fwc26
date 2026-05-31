@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Get,
   HttpCode,
   HttpStatus,
   Param,
@@ -26,5 +27,11 @@ export class AdminMatchController {
     @Body() body: RegisterMatchResultBody,
   ) {
     return this.adminMatch.registerResult(id, body);
+  }
+
+  /** Distribuição dos placares palpitados para um jogo (mais jogados primeiro). */
+  @Get(':id/guess-distribution')
+  guessDistribution(@Param('id', new ParseUUIDPipe()) id: string) {
+    return this.adminMatch.guessDistribution(id);
   }
 }

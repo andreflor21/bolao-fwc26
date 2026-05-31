@@ -2,6 +2,7 @@ import { FormEvent, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { api, ApiError } from '../lib/api';
 import { Trophy } from '../components/Trophy';
+import { PasswordInput } from '../components/PasswordInput';
 
 export function ResetPassword() {
   const [params] = useSearchParams();
@@ -56,14 +57,12 @@ export function ResetPassword() {
           <form className="mt-6 space-y-4" onSubmit={onSubmit}>
             <div>
               <label className="label">Nova senha</label>
-              <input
-                className="input mt-1"
-                type="password"
+              <PasswordInput
                 required
                 minLength={8}
                 maxLength={128}
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                onChange={setPassword}
               />
             </div>
             {error && (

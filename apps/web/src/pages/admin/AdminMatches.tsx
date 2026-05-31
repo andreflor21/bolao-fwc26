@@ -48,7 +48,7 @@ const BRT_FORMATTER = new Intl.DateTimeFormat('pt-BR', {
 
 export function AdminMatches() {
   const qc = useQueryClient();
-  const [activeRound, setActiveRound] = useState<1 | 2 | 3>(1);
+  const [activeRound, setActiveRound] = useState<1 | 2 | 3 | 'today'>(1);
   const [draft, setDraft] = useState<DraftMap>({});
   const [preview, setPreview] = useState<{ match: MatchDto; data: RegisterPreview['preview'] } | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -147,7 +147,10 @@ export function AdminMatches() {
     );
   }
 
-  const matches = byRound[activeRound];
+  const todayMatches = (matchesQuery.data ?? []).filter(
+    (m) => brtDate(m.kickoffAt) === brtDate(new Date().toISOString()),
+  );
+  const matches = activeRound === 'today' ? todayMatches : byRound[activeRound];
   const registeredInRound = matches.filter((m) => m.homeGoalsOfficial !== null).length;
 
   return (
@@ -177,13 +180,13 @@ export function AdminMatches() {
         </div>
       )}
 
-      <div className="flex gap-2 border-b border-emerald-500/20">
+      <div className="flex gap-2 border-b border-emerald-500/20 overflow-x-auto">
         {([1, 2, 3] as const).map((r) => (
           <button
             key={r}
             onClick={() => setActiveRound(r)}
             className={
-              'px-4 py-2 text-sm font-semibold border-b-2 transition ' +
+              'px-4 py-2 text-sm font-semibold border-b-2 transition whitespace-nowrap ' +
               (activeRound === r
                 ? 'border-gold-400 text-gold-200'
                 : 'border-transparent text-emerald-200/60 hover:text-emerald-100')
@@ -195,6 +198,18 @@ export function AdminMatches() {
             </span>
           </button>
         ))}
+        <button
+          onClick={() => setActiveRound('today')}
+          className={
+            'px-4 py-2 text-sm font-semibold border-b-2 transition whitespace-nowrap ' +
+            (activeRound === 'today'
+              ? 'border-gold-400 text-gold-200'
+              : 'border-transparent text-emerald-200/60 hover:text-emerald-100')
+          }
+        >
+          📅 Jogos do dia
+          <span className="ml-1.5 text-xs text-emerald-300/50">({todayMatches.length})</span>
+        </button>
       </div>
 
       <p className="text-xs text-emerald-300/70">
@@ -202,17 +217,51 @@ export function AdminMatches() {
       </p>
 
       <div className="space-y-2">
+        {matches.length === 0 && (
+          <p className="text-sm text-emerald-200/60 py-6 text-center">
+            {activeRound === 'today' ? 'Nenhum jogo hoje. 📅' : 'Nenhum jogo nesta rodada.'}
+          </p>
+        )}
         {matches.map((m) => (
-          <MatchRow
-            key={m.id}
-            match={m}
-            draft={draft[m.id]}
-            onChange={(home, away) => update(m.id, home, away)}
-            onPreview={() => requestPreview(m)}
-            previewLoading={previewMutation.isPending}
-          />
+          <div key={m.id} className="space-y-2">
+            <MatchRow
+              match={m}
+              draft={draft[m.id]}
+              onChange={(home, away) => update(m.id, home, away)}
+              onPreview={() => requestPreview(m)}
+              previewLoading={previewMutation.isPending}
+            />
+            {activeRound === 'today' && (
+              <TodayMatchExtras
+                match={m}
+                onCopied={() => {
+                  setToast('📋 Copiado pro WhatsApp!');
+                  setTimeout(() => setToast(null), 2500);
+                }}
+              />
+            )}
+          </div>
         ))}
       </div>
+
+      {typeof activeRound === 'number' && activeRound < 3 && (
+        <div className="flex items-center justify-between gap-3 pt-2 border-t border-emerald-500/15">
+          <p className="text-xs text-emerald-300/60">
+            {registeredInRound === matches.length
+              ? '✅ Rodada completa!'
+              : `${matches.length - registeredInRound} jogo(s) sem resultado nesta rodada.`}
+          </p>
+          <button
+            className="btn-gold text-sm"
+            onClick={() => {
+              setActiveRound((activeRound + 1) as 1 | 2 | 3);
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
+          >
+            Ir para a Rodada {activeRound + 1} →
+          </button>
+        </div>
+      )}
 
       {preview && (
         <PreviewModal
@@ -411,4 +460,57 @@ function kickoffLabel(iso: string): string {
   } catch {
     return iso;
   }
+}
+
+/** YYYY-MM-DD na timezone de São Paulo (pra comparar "é hoje?"). */
+function brtDate(iso: string): string {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date(iso));
+}
+
+type Distribution = Array<{ homeGoals: number; awayGoals: number; count: number }>;
+
+function TodayMatchExtras({ match, onCopied }: { match: MatchDto; onCopied: () => void }) {
+  const { data } = useQuery({
+    queryKey: ['guess-distribution', match.id],
+    queryFn: () => api<Distribution>(`/admin/matches/${match.id}/guess-distribution`),
+  });
+  if (!data) return null;
+  const top = data.slice(0, 5);
+  const total = data.reduce((s, d) => s + d.count, 0);
+
+  function copy() {
+    const home = match.homeTeamName ?? match.homeTeamCode ?? '';
+    const away = match.awayTeamName ?? match.awayTeamCode ?? '';
+    const lines = top.map(
+      (d, i) => `${i + 1}. ${d.homeGoals}x${d.awayGoals} — ${d.count} palpite${d.count !== 1 ? 's' : ''}`,
+    );
+    const text = `⚽ ${home} x ${away}\nPalpites mais jogados:\n${lines.join('\n')}`;
+    navigator.clipboard?.writeText(text).then(onCopied).catch(() => undefined);
+  }
+
+  return (
+    <div className="rounded-xl border border-emerald-500/10 bg-midnight-900/30 px-3 py-2">
+      <div className="flex items-center justify-between gap-2 mb-1">
+        <p className="text-[10px] tracking-widest text-emerald-300/60">
+          PALPITES MAIS JOGADOS{total > 0 ? ` (${total})` : ''}
+        </p>
+        {top.length > 0 && (
+          <button onClick={copy} className="btn-secondary text-[11px] py-1">
+            📋 Copiar p/ WhatsApp
+          </button>
+        )}
+      </div>
+      {top.length === 0 ? (
+        <p className="text-xs text-emerald-200/50">Ninguém palpitou esse jogo ainda.</p>
+      ) : (
+        <ul className="flex flex-wrap gap-2">
+          {top.map((d) => (
+            <li key={`${d.homeGoals}-${d.awayGoals}`} className="chip text-[11px]">
+              {d.homeGoals}×{d.awayGoals} <span className="text-emerald-300/60">· {d.count}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
 }
