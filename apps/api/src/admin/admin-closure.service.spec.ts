@@ -4,6 +4,7 @@ import { AdminClosureService } from './admin-closure.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { RankingService } from '../ranking/ranking.service';
 import { PrizeService } from '../prize/prize.service';
+import { EmailService } from '../email/email.service';
 import { REDIS_CLIENT } from '../redis/redis.tokens';
 import { FIFA_WC_2026_ID, type PrizeCategory } from '@bolao/shared';
 
@@ -144,6 +145,11 @@ describe('AdminClosureService', () => {
 
     const prizeMock = { invalidate: jest.fn(async () => undefined) };
 
+    const emailMock = {
+      sendPrizeAwarded: jest.fn(async () => undefined),
+      sendPrizePaid: jest.fn(async () => undefined),
+    };
+
     const redisMock = {
       mget: jest.fn(async (...keys: string[]) =>
         keys.map((k) => state.redisCounts[k] ?? null),
@@ -156,6 +162,7 @@ describe('AdminClosureService', () => {
         { provide: PrismaService, useValue: prismaMock },
         { provide: RankingService, useValue: rankingMock },
         { provide: PrizeService, useValue: prizeMock },
+        { provide: EmailService, useValue: emailMock },
         { provide: REDIS_CLIENT, useValue: redisMock },
       ],
     }).compile();

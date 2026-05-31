@@ -103,7 +103,8 @@ export function Ranking() {
         </div>
       ) : (
         <section className="card">
-          <table className="w-full text-sm">
+          <div className="overflow-x-auto">
+          <table className="w-full text-sm min-w-[420px]">
             <thead>
               <tr className="text-emerald-300/60 text-[11px] tracking-widest">
                 <th className="text-left py-2 w-12">#</th>
@@ -144,6 +145,7 @@ export function Ranking() {
               ))}
             </tbody>
           </table>
+          </div>
 
           {ranking?.ownPosition && ranking.ownPosition > ranking.rows.length && (
             <p className="mt-4 text-xs text-emerald-200/70">

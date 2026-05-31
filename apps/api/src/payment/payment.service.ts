@@ -26,11 +26,18 @@ export interface CreateCheckoutSessionResponse {
   /** Hosted checkout URL — frontend redirects the browser to this. */
   checkoutUrl: string;
   expiresAt: string;
+  /** Total cobrado no checkout (líquido + sobretaxa). */
   amountCents: number;
+  /** Valor da inscrição (líquido, o que vai pro pool). */
+  baseAmountCents: number;
+  /** Sobretaxa da operação (cobre a taxa da Stripe). 0 se não configurada. */
+  surchargeCents: number;
   /** Subscription status from our DB — the source of truth post-webhook. */
   subscriptionStatus: 'pending_payment' | 'active' | 'refunded';
   /** ISO list of methods enabled for this session (shown in UI as a heads-up). */
   methods: PaymentMethodKey[];
+  /** True when the manual-Pix (BR Code + IA do comprovante) fallback is wired. */
+  pixFallbackEnabled: boolean;
 }
 
 export interface PaymentStatusResponse {
@@ -49,9 +56,18 @@ const DEFAULT_METHODS: PaymentMethodKey[] = ['card', 'link', 'boleto'];
 export class PaymentService {
   private readonly logger = new Logger(PaymentService.name);
   private readonly amountCents: number;
+  /**
+   * Sobretaxa (em centavos) somada SÓ ao valor cobrado no Stripe Checkout para
+   * cobrir a taxa da operação (cartão 3,99%+R$0,39 / boleto R$3,45 fixo). NÃO
+   * entra no `amountCents` da inscrição — o pool/prêmio continua no líquido.
+   * Valor único para todos os métodos; use o pior caso (boleto = 345) para
+   * garantir que o líquido nunca fique abaixo do valor da inscrição.
+   */
+  private readonly surchargeCents: number;
   private readonly methods: PaymentMethodKey[];
   private readonly boletoExpiresAfterDays: number;
   private readonly webOrigin: string;
+  private readonly pixFallbackEnabled: boolean;
 
   constructor(
     @Inject(PAYMENT_DRIVER) private readonly driver: IPaymentDriver,
@@ -61,8 +77,14 @@ export class PaymentService {
     config: ConfigService,
   ) {
     this.amountCents = Number(config.get('SUBSCRIPTION_AMOUNT_CENTS') ?? 5000);
+    this.surchargeCents = Number(config.get('SUBSCRIPTION_SURCHARGE_CENTS') ?? 0);
     this.boletoExpiresAfterDays = Number(config.get('STRIPE_BOLETO_EXPIRES_AFTER_DAYS') ?? 3);
     this.webOrigin = config.get<string>('WEB_ORIGIN') ?? 'http://localhost:5173';
+    // Manual-Pix fallback feature flag — surfaced on the create-session
+    // response so the /pay UI can offer the "pagar com Pix" link without
+    // a second roundtrip. PixFallbackService gates the actual endpoints.
+    this.pixFallbackEnabled =
+      (config.get<string>('PIX_FALLBACK_ENABLED') ?? 'false').toLowerCase() === 'true';
     const raw = config.get<string>('STRIPE_CHECKOUT_METHODS');
     if (raw) {
       const parsed = raw
@@ -75,7 +97,12 @@ export class PaymentService {
     } else {
       this.methods = DEFAULT_METHODS;
     }
-    this.logger.log(`Checkout methods: ${this.methods.join(', ')}`);
+    this.logger.log(
+      `Checkout methods: ${this.methods.join(', ')}` +
+        (this.surchargeCents > 0
+          ? ` | surcharge: ${this.surchargeCents}c (cobrado ${this.amountCents + this.surchargeCents}c, pool ${this.amountCents}c)`
+          : ''),
+    );
   }
 
   /**
@@ -114,6 +141,14 @@ export class PaymentService {
         },
       }));
 
+    // Email is passed to Stripe so Link recognises returning customers
+    // and offers one-click prefill. Falls through silently if the user
+    // row is gone (shouldn't happen — JWT guard would have rejected first).
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { email: true },
+    });
+
     // Reuse an active, unexpired session when we can — avoids creating a
     // fresh Checkout every time the user comes back to /pay.
     if (
@@ -138,12 +173,15 @@ export class PaymentService {
 
     const session = await this.driver.createCheckoutSession({
       userId,
-      amountCents: subscription.amountCents,
+      // Cobra o bruto (líquido + sobretaxa da operação). O `subscription.amountCents`
+      // permanece líquido — é ele que alimenta o pool/prêmio.
+      amountCents: subscription.amountCents + this.surchargeCents,
       description: 'Inscrição Bolão Copa do Mundo FIFA 2026',
       successUrl: `${this.webOrigin}/pay/success?sid={CHECKOUT_SESSION_ID}`,
       cancelUrl: `${this.webOrigin}/pay/cancel`,
       methods: this.methods,
       boletoExpiresAfterDays: this.boletoExpiresAfterDays,
+      customerEmail: user?.email,
       clientReferenceId: subscription.id,
       metadata: { competitionId: FIFA_WC_2026_ID, subscriptionId: subscription.id },
     });
@@ -367,6 +405,22 @@ export class PaymentService {
   }
 
   /**
+   * Marks a Checkout Session as expired — clears the stale session ID on
+   * the matching subscription so the next /subscription/checkout-session
+   * call mints a fresh one instead of trying to reuse the dead Stripe row.
+   *
+   * Idempotent: uses updateMany so a session that didn't match (e.g.
+   * already replaced or refunded) is a silent no-op.
+   */
+  async markCheckoutSessionExpired(sessionId: string): Promise<void> {
+    await this.prisma.subscription.updateMany({
+      where: { stripeCheckoutSessionId: sessionId, status: 'pending_payment' },
+      data: { stripeCheckoutSessionId: null, checkoutSessionExpiresAt: null },
+    });
+    this.logger.log(`Cleared expired Checkout Session ${sessionId} from subscription`);
+  }
+
+  /**
    * Idempotent refund-from-webhook: invoked when Stripe tells us a charge
    * for one of our PIs has been refunded outside the app (manual dashboard
    * action, dispute auto-refund, etc.). Mirrors {@link refund} but doesn't
@@ -416,9 +470,36 @@ export class PaymentService {
     }
 
     switch (event.type) {
+      // Sync settlements (card, Link, Apple Pay) — session.completed arrives
+      // with the PI already attached and we activate immediately.
       case 'checkout.session.completed': {
         if (!event.checkoutSessionId) return { handled: false, reason: 'no_session' };
         await this.activateFromCheckoutSession(event.checkoutSessionId, event.paymentIntentId);
+        return { handled: true };
+      }
+      // Async settlements (boleto, pix): session.completed fires when the
+      // voucher is *issued*, then async_payment_succeeded confirms the
+      // bank-side payment hours/days later. Idempotency via
+      // processed_webhook_events PK keeps double-activation safe.
+      case 'checkout.session.async_payment_succeeded': {
+        if (!event.checkoutSessionId) return { handled: false, reason: 'no_session' };
+        await this.activateFromCheckoutSession(event.checkoutSessionId, event.paymentIntentId);
+        return { handled: true };
+      }
+      // Boleto expired or async method declined upstream. For boleto the PI
+      // often stays in requires_payment_method (not 'failed'), so this is
+      // the canonical fail signal — payment_intent.payment_failed may
+      // never fire.
+      case 'checkout.session.async_payment_failed': {
+        if (!event.paymentIntentId) return { handled: false, reason: 'no_payment_intent' };
+        await this.markPaymentFailed(event.paymentIntentId, 'async_payment_failed');
+        return { handled: true };
+      }
+      // Hosted page TTL (default 24h) passed without payment. Clear the
+      // stale session ID so the next createOrGet mints a fresh one.
+      case 'checkout.session.expired': {
+        if (!event.checkoutSessionId) return { handled: false, reason: 'no_session' };
+        await this.markCheckoutSessionExpired(event.checkoutSessionId);
         return { handled: true };
       }
       case 'payment_intent.succeeded': {
@@ -455,9 +536,12 @@ export class PaymentService {
       sessionId: session.sessionId,
       checkoutUrl: session.url,
       expiresAt: session.expiresAt,
-      amountCents: session.amountCents || this.amountCents,
+      amountCents: session.amountCents || this.amountCents + this.surchargeCents,
+      baseAmountCents: this.amountCents,
+      surchargeCents: this.surchargeCents,
       subscriptionStatus,
       methods: this.methods,
+      pixFallbackEnabled: this.pixFallbackEnabled,
     };
   }
 }

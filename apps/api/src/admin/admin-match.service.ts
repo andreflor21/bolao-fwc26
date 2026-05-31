@@ -176,4 +176,58 @@ export class AdminMatchService {
       noChange: false,
     };
   }
+
+  /**
+   * Distribuição dos placares palpitados para um jogo — agrupa os guesses por
+   * (homeGoals, awayGoals) e ordena pelos mais jogados. Usado no painel admin
+   * pra mostrar/compartilhar os palpites mais populares.
+   */
+  async guessDistribution(
+    matchId: string,
+  ): Promise<Array<{ homeGoals: number; awayGoals: number; count: number }>> {
+    const grouped = await this.prisma.guess.groupBy({
+      by: ['homeGoals', 'awayGoals'],
+      where: { matchId },
+      _count: { _all: true },
+    });
+    return grouped
+      .map((g) => ({ homeGoals: g.homeGoals, awayGoals: g.awayGoals, count: g._count._all }))
+      .sort((a, b) => b.count - a.count);
+  }
+
+  /**
+   * Lança vários resultados de uma vez (import de CSV). Reusa registerResult
+   * por linha — cada falha (jogo inexistente, sobrescrita recusada) é coletada
+   * sem abortar o lote. Resultados já iguais contam como noChange.
+   */
+  async bulkRegisterResults(
+    rows: Array<{ matchId: string; homeGoals: number; awayGoals: number }>,
+  ): Promise<{
+    applied: number;
+    noChange: number;
+    errors: Array<{ matchId: string; message: string }>;
+  }> {
+    let applied = 0;
+    let noChange = 0;
+    const errors: Array<{ matchId: string; message: string }> = [];
+    for (const r of rows) {
+      try {
+        const res = await this.registerResult(r.matchId, {
+          homeGoals: r.homeGoals,
+          awayGoals: r.awayGoals,
+          confirmPreview: true,
+        });
+        if ('applied' in res && res.applied) {
+          if (res.noChange) noChange += 1;
+          else applied += 1;
+        }
+      } catch (e) {
+        errors.push({ matchId: r.matchId, message: (e as Error).message });
+      }
+    }
+    this.logger.log(
+      `Bulk results: ${applied} aplicados, ${noChange} sem mudança, ${errors.length} erros`,
+    );
+    return { applied, noChange, errors };
+  }
 }

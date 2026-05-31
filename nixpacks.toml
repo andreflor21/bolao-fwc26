@@ -1,0 +1,24 @@
+# Nixpacks — build/deploy da API (@bolao/api) no monorepo pnpm + Turbo.
+# Sobe via Coolify com Build Pack = Nixpacks, na raiz do repositório.
+
+[phases.setup]
+# openssl é necessário pro Prisma rodar no runtime nix
+nixPkgs = ["nodejs_20", "openssl"]
+
+[phases.install]
+cmds = [
+  "corepack enable && corepack prepare pnpm@9.0.0 --activate",
+  "pnpm install --frozen-lockfile",
+]
+
+[phases.build]
+cmds = [
+  "pnpm --filter @bolao/shared build",
+  # DATABASE_URL dummy: generate não conecta, mas prisma.config.ts exige a var
+  "DATABASE_URL=postgresql://build:build@localhost:5432/build pnpm --filter @bolao/api exec prisma generate",
+  "pnpm --filter @bolao/api build",
+]
+
+[start]
+# roda as migrations e sobe a API; DATABASE_URL real vem das env do Coolify
+cmd = "cd apps/api && pnpm exec prisma migrate deploy && node dist/main.js"

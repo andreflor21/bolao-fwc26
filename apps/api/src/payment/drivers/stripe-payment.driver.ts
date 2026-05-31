@@ -47,13 +47,18 @@ class StripeOperationError extends Error {
  */
 const METHOD_TO_STRIPE: Record<PaymentMethodKey, string> = {
   card: 'card',
-  link: 'link',
   boleto: 'boleto',
   pix: 'pix',
   // apple_pay is implicitly enabled by Stripe whenever 'card' is enabled
   // and the requesting browser/device supports it. Stripe doesn't accept
   // 'apple_pay' as a payment_method_types value — we silently dedupe to 'card'.
   apple_pay: 'card',
+  // Link in Checkout is offered automatically alongside 'card' for eligible
+  // (US-funded) customers when customer_email is supplied; the resulting
+  // payment_method.type is 'card'. Passing 'link' explicitly in
+  // payment_method_types fails on accounts where Link isn't activated
+  // (e.g. BR/BRL), so we dedupe to 'card' like apple_pay.
+  link: 'card',
 };
 
 export class StripePaymentDriver implements IPaymentDriver {
@@ -106,6 +111,11 @@ export class StripePaymentDriver implements IPaymentDriver {
           success_url: input.successUrl,
           cancel_url: input.cancelUrl,
           client_reference_id: input.clientReferenceId,
+          // customer_email lets Stripe Link identify returning customers
+          // from a prior Link purchase on any Stripe merchant and offer
+          // one-click checkout. Link is enabled automatically alongside
+          // 'card' in Checkout — see METHOD_TO_STRIPE.
+          ...(input.customerEmail ? { customer_email: input.customerEmail } : {}),
           metadata: {
             userId: input.userId,
             ...(input.metadata ?? {}),

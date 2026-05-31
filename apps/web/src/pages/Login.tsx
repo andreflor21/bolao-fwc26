@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../lib/auth';
 import { ApiError } from '../lib/api';
 import { Trophy } from '../components/Trophy';
+import { PasswordInput } from '../components/PasswordInput';
 
 export function Login() {
   const { login } = useAuth();
@@ -50,14 +51,12 @@ export function Login() {
           </div>
           <div>
             <label className="label">Senha</label>
-            <input
-              className="input mt-1"
-              type="password"
+            <PasswordInput
               autoComplete="current-password"
               required
               minLength={8}
               value={password}
-              onChange={(e) => setPassword(e.target.value)}
+              onChange={setPassword}
             />
           </div>
           {error && (

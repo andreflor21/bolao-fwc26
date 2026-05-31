@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../lib/auth';
 import { ApiError } from '../lib/api';
 import { Trophy } from '../components/Trophy';
+import { PasswordInput } from '../components/PasswordInput';
 
 export function Register() {
   const { register } = useAuth();
@@ -10,6 +11,8 @@ export function Register() {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [whatsapp, setWhatsapp] = useState('');
+  const [whatsappGroupOptIn, setWhatsappGroupOptIn] = useState(false);
   const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -23,7 +26,10 @@ export function Register() {
     }
     setLoading(true);
     try {
-      await register(email, password, name);
+      await register(email, password, name, {
+        whatsapp: whatsapp.trim() || undefined,
+        whatsappGroupOptIn,
+      });
       navigate('/dashboard');
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Erro inesperado');
@@ -68,18 +74,40 @@ export function Register() {
           </div>
           <div>
             <label className="label">Senha</label>
-            <input
-              className="input mt-1"
-              type="password"
+            <PasswordInput
               autoComplete="new-password"
               required
               minLength={8}
               maxLength={128}
               value={password}
-              onChange={(e) => setPassword(e.target.value)}
+              onChange={setPassword}
             />
             <p className="mt-1 text-xs text-emerald-200/50">Mínimo 8 caracteres.</p>
           </div>
+          <div>
+            <label className="label">
+              WhatsApp <span className="text-emerald-200/50 font-normal">(opcional)</span>
+            </label>
+            <input
+              className="input mt-1"
+              type="tel"
+              autoComplete="tel"
+              inputMode="tel"
+              placeholder="+55 11 90000-0000"
+              maxLength={20}
+              value={whatsapp}
+              onChange={(e) => setWhatsapp(e.target.value)}
+            />
+          </div>
+          <label className="flex items-start gap-3 text-sm text-emerald-100/80">
+            <input
+              type="checkbox"
+              className="mt-1 h-4 w-4 rounded border-emerald-500/40 bg-midnight-900 text-gold-500 focus:ring-gold-500"
+              checked={whatsappGroupOptIn}
+              onChange={(e) => setWhatsappGroupOptIn(e.target.checked)}
+            />
+            <span>Quero entrar no grupo do WhatsApp do bolão.</span>
+          </label>
           <label className="flex items-start gap-3 text-sm text-emerald-100/80">
             <input
               type="checkbox"
@@ -88,8 +116,8 @@ export function Register() {
               onChange={(e) => setAcceptedTerms(e.target.checked)}
             />
             <span>
-              Li e aceito os <a className="link-accent" href="#">termos de uso</a> e a{' '}
-              <a className="link-accent" href="#">política de privacidade</a>.
+              Li e aceito os <Link className="link-accent" to="/terms">termos de uso</Link> e a{' '}
+              <Link className="link-accent" to="/privacy">política de privacidade</Link>.
             </span>
           </label>
           {error && (

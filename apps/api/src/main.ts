@@ -1,9 +1,12 @@
+import './instrument'; // Sentry.init — DEVE ser o primeiro import
 import 'reflect-metadata';
 import { NestFactory } from '@nestjs/core';
 import { FastifyAdapter, NestFastifyApplication } from '@nestjs/platform-fastify';
-import { ValidationPipe, Logger } from '@nestjs/common';
+import { ValidationPipe } from '@nestjs/common';
+import { Logger } from 'nestjs-pino';
 import helmet from '@fastify/helmet';
 import cookie from '@fastify/cookie';
+import multipart from '@fastify/multipart';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
@@ -15,11 +18,20 @@ async function bootstrap() {
     { bufferLogs: true, rawBody: true },
   );
 
+  // Pino como logger da aplicação (logs estruturados + x-request-id).
+  app.useLogger(app.get(Logger));
+
   await app.register(helmet, {
     contentSecurityPolicy: false,
   });
   await app.register(cookie, {
     secret: process.env.JWT_SECRET ?? 'change-me',
+  });
+  // Multipart for Pix-receipt uploads. Single file cap matches the
+  // PixFallbackService 5MB ceiling — Fastify rejects oversized bodies
+  // before they reach the controller.
+  await app.register(multipart, {
+    limits: { fileSize: 5 * 1024 * 1024, files: 1 },
   });
 
   app.setGlobalPrefix('api/v1');
@@ -36,13 +48,18 @@ async function bootstrap() {
   app.enableCors({
     origin: webOrigin.split(',').map((s) => s.trim()),
     credentials: true,
+    // Sem isto o @fastify/cors só libera os métodos "safelisted"
+    // (GET/HEAD/POST) no preflight, e os PUT (auto-save de palpites,
+    // knockout-scores, manual-tiebreak) são bloqueados pelo navegador.
+    methods: ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Authorization', 'Content-Type'],
   });
 
   const port = Number(process.env.API_PORT ?? 3001);
   const host = process.env.API_HOST ?? '0.0.0.0';
   await app.listen(port, host);
 
-  Logger.log(`🚀 API ready at http://${host}:${port}/api/v1`, 'Bootstrap');
+  app.get(Logger).log(`🚀 API ready at http://${host}:${port}/api/v1`);
 }
 
 bootstrap().catch((err) => {

@@ -1,8 +1,15 @@
+import 'dotenv/config';
 import { PrismaClient } from '@prisma/client';
+import { PrismaPg } from '@prisma/adapter-pg';
 import { seedTeams } from './seeds/teams';
 import { seedGroupMatches } from './seeds/matches';
 
-const prisma = new PrismaClient();
+if (!process.env.DATABASE_URL) {
+  throw new Error('DATABASE_URL is required to run seed');
+}
+const prisma = new PrismaClient({
+  adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }),
+});
 
 const FIFA_WC_2026_ID = 'fifa-wc-2026';
 

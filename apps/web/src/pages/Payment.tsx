@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { api, ApiError } from '../lib/api';
 
 interface CreateSessionResponse {
@@ -8,16 +8,19 @@ interface CreateSessionResponse {
   checkoutUrl: string;
   expiresAt: string;
   amountCents: number;
+  baseAmountCents: number;
+  surchargeCents: number;
   subscriptionStatus: 'pending_payment' | 'active' | 'refunded';
   methods: Array<'card' | 'link' | 'boleto' | 'pix' | 'apple_pay'>;
+  pixFallbackEnabled: boolean;
 }
 
 const METHOD_LABEL: Record<string, string> = {
-  card: 'Cartão (crédito/débito)',
-  link: 'Link (autofill Stripe)',
-  boleto: 'Boleto bancário',
-  pix: 'Pix',
-  apple_pay: 'Apple Pay',
+  card: '💳 Cartão',
+  link: '🔗 Link',
+  boleto: '🧾 Boleto',
+  pix: '📱 Pix',
+  apple_pay: ' Apple Pay',
 };
 
 function formatBRL(cents: number): string {
@@ -49,6 +52,9 @@ export function Payment() {
   // the same session (idempotent), so no waste.
   const [methods, setMethods] = useState<CreateSessionResponse['methods']>([]);
   const [amountCents, setAmountCents] = useState<number | null>(null);
+  const [baseAmountCents, setBaseAmountCents] = useState<number | null>(null);
+  const [surchargeCents, setSurchargeCents] = useState(0);
+  const [pixFallback, setPixFallback] = useState(false);
   useEffect(() => {
     let cancelled = false;
     api<CreateSessionResponse>('/subscription/checkout-session', { method: 'POST' })
@@ -56,6 +62,9 @@ export function Payment() {
         if (cancelled) return;
         setMethods(data.methods);
         setAmountCents(data.amountCents);
+        setBaseAmountCents(data.baseAmountCents);
+        setSurchargeCents(data.surchargeCents);
+        setPixFallback(data.pixFallbackEnabled);
       })
       .catch((e: unknown) => {
         if (e instanceof ApiError && e.status === 409) {
@@ -77,8 +86,8 @@ export function Payment() {
           <span className="text-shimmer">PAGAMENTO</span>
         </h1>
         <p className="text-sm text-emerald-200/70 mt-2">
-          {amountCents
-            ? `Pague ${formatBRL(amountCents)} para ativar sua inscrição. Você será levado ao checkout seguro da Stripe.`
+          {baseAmountCents
+            ? `Pague ${formatBRL(baseAmountCents)}${surchargeCents > 0 ? ' + taxa de processamento' : ''} para ativar sua inscrição. Você será levado ao checkout seguro da Stripe.`
             : 'Carregando opções de pagamento...'}
         </p>
       </header>
@@ -126,13 +135,35 @@ export function Payment() {
           >
             {createSession.isPending
               ? 'Abrindo checkout...'
-              : `💳 Pagar agora${amountCents ? ` — ${formatBRL(amountCents)}` : ''}`}
+              : `💳 Pagar agora${baseAmountCents ? ` — ${formatBRL(baseAmountCents)}${surchargeCents > 0 ? ' + taxa' : ''}` : ''}`}
           </button>
+          {surchargeCents > 0 && amountCents && baseAmountCents && (
+            <p className="text-[11px] text-emerald-200/60 mt-2">
+              Total no checkout: <strong>{formatBRL(amountCents)}</strong> ({formatBRL(baseAmountCents)} de inscrição + {formatBRL(surchargeCents)} de taxa de processamento).
+            </p>
+          )}
           <p className="text-[11px] text-emerald-200/50 mt-2">
             Você será redirecionado para a página segura da Stripe. Após confirmar o
             pagamento, voltará automaticamente para o app.
           </p>
         </div>
+
+        {pixFallback && (
+          <div className="border-t border-emerald-500/15 pt-4">
+            <p className="text-xs text-emerald-300/70 tracking-wider uppercase mb-2">
+              Ou pague com Pix
+            </p>
+            <Link
+              to="/pay/pix"
+              className="inline-flex items-center gap-2 text-sm text-emerald-100 border border-emerald-500/30 hover:border-emerald-400/60 rounded-md px-4 py-2 transition"
+            >
+              📱 Pagar com Pix (QR Code + comprovante)
+            </Link>
+            <p className="text-[11px] text-emerald-200/50 mt-2">
+              Anexe o comprovante e confirmamos sua inscrição automaticamente.
+            </p>
+          </div>
+        )}
       </section>
 
       <p className="text-xs text-emerald-200/60 text-center">
