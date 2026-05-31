@@ -191,6 +191,8 @@ model Subscription {
   pixReceiptUploadedAt     DateTime?          @map("pix_receipt_uploaded_at")
   pixReceiptVerdict        Json?              @map("pix_receipt_verdict")
   pixReceiptNotes          String?            @map("pix_receipt_notes")
+  pixReceiptImage          String?            @map("pix_receipt_image")
+  pixReceiptMime           String?            @map("pix_receipt_mime")
   createdAt                DateTime           @default(now()) @map("created_at")
   updatedAt                DateTime           @updatedAt @map("updated_at")
 

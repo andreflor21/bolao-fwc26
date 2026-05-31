@@ -24,6 +24,7 @@ import { AdminMatches } from './pages/admin/AdminMatches';
 import { AdminPrizes } from './pages/admin/AdminPrizes';
 import { AdminClosure } from './pages/admin/AdminClosure';
 import { AdminReconciliation } from './pages/admin/AdminReconciliation';
+import { AdminPixApprovals } from './pages/admin/AdminPixApprovals';
 import { useAuth } from './lib/auth';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -153,6 +154,7 @@ export function App() {
           <Route path="matches" element={<AdminMatches />} />
           <Route path="prizes" element={<AdminPrizes />} />
           <Route path="closure" element={<AdminClosure />} />
+          <Route path="pix" element={<AdminPixApprovals />} />
           <Route path="reconciliation" element={<AdminReconciliation />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />

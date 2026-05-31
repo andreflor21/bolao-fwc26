@@ -52,9 +52,9 @@ export function Dashboard() {
     <div className="space-y-8">
       <PushConsentBanner />
       <header className="flex items-end justify-between flex-wrap gap-3">
-        <div>
+        <div className="min-w-0">
           <p className="text-xs font-bold tracking-[0.4em] text-gold-400">SUA CENTRAL</p>
-          <h1 className="font-display text-4xl tracking-wider text-white mt-1">
+          <h1 className="font-display text-3xl sm:text-4xl tracking-wider text-white mt-1 break-words">
             OLÁ, <span className="text-shimmer">{user?.name.split(' ')[0]?.toUpperCase() ?? ''}</span>
           </h1>
         </div>
@@ -66,7 +66,7 @@ export function Dashboard() {
           <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-gold-300 to-gold-600 grid place-items-center text-midnight-900 text-xl shadow-md">
             🎯
           </div>
-          <h2 className="font-display text-2xl tracking-wider text-white">INSCRIÇÃO · BOLÃO GERAL</h2>
+          <h2 className="font-display text-xl sm:text-2xl tracking-wider text-white">INSCRIÇÃO · BOLÃO GERAL</h2>
         </div>
 
         {status === 'not_subscribed' && (
@@ -134,7 +134,7 @@ export function Dashboard() {
           <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-red-500 to-red-700 grid place-items-center text-white text-xl shadow-md">
             {liveMatches.length > 0 ? '🔴' : '⚽'}
           </div>
-          <h2 className="font-display text-2xl tracking-wider text-white">JOGOS AO VIVO</h2>
+          <h2 className="font-display text-xl sm:text-2xl tracking-wider text-white">JOGOS AO VIVO</h2>
           {liveMatches.length > 0 && (
             <span className="ml-auto inline-flex items-center gap-1.5 text-xs font-bold text-red-300">
               <span className="h-2 w-2 rounded-full bg-red-500 animate-pulse" />

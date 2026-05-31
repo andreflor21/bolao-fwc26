@@ -26,6 +26,7 @@ function AdminLayout() {
           <SidebarLink to="/admin/matches" label="Resultados" icon="📊" />
           <SidebarLink to="/admin/prizes" label="Premiação" icon="🏆" />
           <SidebarLink to="/admin/closure" label="Encerramento" icon="🔒" />
+          <SidebarLink to="/admin/pix" label="Pix" icon="💸" />
           <SidebarLink to="/admin/reconciliation" label="Reconciliação" icon="🔁" />
         </div>
       </aside>
