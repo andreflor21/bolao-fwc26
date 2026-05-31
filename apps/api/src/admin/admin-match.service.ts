@@ -176,4 +176,22 @@ export class AdminMatchService {
       noChange: false,
     };
   }
+
+  /**
+   * Distribuição dos placares palpitados para um jogo — agrupa os guesses por
+   * (homeGoals, awayGoals) e ordena pelos mais jogados. Usado no painel admin
+   * pra mostrar/compartilhar os palpites mais populares.
+   */
+  async guessDistribution(
+    matchId: string,
+  ): Promise<Array<{ homeGoals: number; awayGoals: number; count: number }>> {
+    const grouped = await this.prisma.guess.groupBy({
+      by: ['homeGoals', 'awayGoals'],
+      where: { matchId },
+      _count: { _all: true },
+    });
+    return grouped
+      .map((g) => ({ homeGoals: g.homeGoals, awayGoals: g.awayGoals, count: g._count._all }))
+      .sort((a, b) => b.count - a.count);
+  }
 }
