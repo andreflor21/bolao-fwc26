@@ -87,7 +87,8 @@ export class RankingService {
   }
 
   async getGeneralRanking(opts: { limit: number; userId?: string }): Promise<RankingDto> {
-    return this.zsetToRanking(KEYS.general, 'Geral', opts);
+    const participantIds = await this.generalParticipantIds();
+    return this.zsetToRanking(KEYS.general, 'Geral', opts, participantIds);
   }
 
   async getSidePoolRanking(
@@ -95,7 +96,26 @@ export class RankingService {
     poolName: string,
     opts: { limit: number; userId?: string },
   ): Promise<RankingDto> {
-    return this.zsetToRanking(KEYS.side(sidePoolId), poolName, opts);
+    const participantIds = await this.sidePoolParticipantIds(sidePoolId);
+    return this.zsetToRanking(KEYS.side(sidePoolId), poolName, opts, participantIds);
+  }
+
+  /** Active subscribers of the competition — the full general-pool roster. */
+  private async generalParticipantIds(): Promise<string[]> {
+    const subs = await this.prisma.subscription.findMany({
+      where: { competitionId: FIFA_WC_2026_ID, status: 'active' },
+      select: { userId: true },
+    });
+    return subs.map((s) => s.userId);
+  }
+
+  /** Everyone who joined a given side pool — the full side-pool roster. */
+  private async sidePoolParticipantIds(sidePoolId: string): Promise<string[]> {
+    const members = await this.prisma.sidePoolMember.findMany({
+      where: { sidePoolId },
+      select: { userId: true },
+    });
+    return members.map((m) => m.userId);
   }
 
   async getExactScoreLeader(): Promise<{ userId: string; count: number; name: string } | null> {
@@ -129,33 +149,52 @@ export class RankingService {
     key: string,
     poolName: string,
     opts: { limit: number; userId?: string },
+    participantIds: string[],
   ): Promise<RankingDto> {
     const limit = Math.max(1, Math.min(opts.limit, 1000));
-    const flat = await this.redis.zrevrange(key, 0, limit - 1, 'WITHSCORES');
-    const pairs: Array<[string, number]> = [];
-    for (let i = 0; i < flat.length; i += 2) {
-      pairs.push([flat[i]!, Number(flat[i + 1])]);
-    }
-    const userIds = pairs.map((p) => p[0]);
-    const includeOwn = opts.userId && !userIds.includes(opts.userId);
-    if (includeOwn && opts.userId) userIds.push(opts.userId);
 
-    const [users, total] = await Promise.all([
+    // Scored users, highest first. We pull the full ZSET (pools are small —
+    // see getExactScoreLeader note) so we can merge in participants who have
+    // not scored yet and still respect the score ordering.
+    const flat = await this.redis.zrevrange(key, 0, -1, 'WITHSCORES');
+    const scored: Array<[string, number]> = [];
+    const scoredIds = new Set<string>();
+    for (let i = 0; i < flat.length; i += 2) {
+      const id = flat[i]!;
+      scored.push([id, Number(flat[i + 1])]);
+      scoredIds.add(id);
+    }
+
+    // Participants with no score yet — appended at the bottom with 0 points so
+    // everyone enrolled shows up even before any result is registered.
+    const unscoredIds = participantIds.filter((id) => !scoredIds.has(id));
+
+    const displayIds = [...scoredIds, ...unscoredIds];
+    const [users, exactCounts] = await Promise.all([
       this.prisma.user.findMany({
-        where: { id: { in: userIds } },
+        where: { id: { in: displayIds } },
         select: { id: true, name: true },
       }),
-      this.redis.zcard(key),
+      displayIds.length
+        ? this.redis.mget(...displayIds.map((id) => KEYS.exact(id)))
+        : Promise.resolve([] as (string | null)[]),
     ]);
     const userById = new Map(users.map((u) => [u.id, u.name]));
-    const exactCounts = userIds.length
-      ? await this.redis.mget(...userIds.map((id) => KEYS.exact(id)))
-      : [];
     const exactById = new Map(
-      userIds.map((id, idx) => [id, Number(exactCounts[idx] ?? 0)]),
+      displayIds.map((id, idx) => [id, Number(exactCounts[idx] ?? 0)]),
     );
 
-    const rows: RankingRowDto[] = pairs.map(([userId, points], idx) => ({
+    // Sort unscored alphabetically for a stable, predictable order.
+    unscoredIds.sort((a, b) =>
+      (userById.get(a) ?? '').localeCompare(userById.get(b) ?? '', 'pt'),
+    );
+
+    const ordered: Array<[string, number]> = [
+      ...scored,
+      ...unscoredIds.map((id) => [id, 0] as [string, number]),
+    ];
+
+    const allRows: RankingRowDto[] = ordered.map(([userId, points], idx) => ({
       position: idx + 1,
       userId,
       name: userById.get(userId) ?? '—',
@@ -164,21 +203,16 @@ export class RankingService {
       isOwn: opts.userId === userId,
     }));
 
-    let ownPosition: number | null = null;
-    if (opts.userId) {
-      const rank = await this.redis.zrevrank(key, opts.userId);
-      ownPosition = rank === null ? null : rank + 1;
-      if (includeOwn && ownPosition !== null) {
-        const ownScore = await this.redis.zscore(key, opts.userId);
-        rows.push({
-          position: ownPosition,
-          userId: opts.userId,
-          name: userById.get(opts.userId) ?? '—',
-          points: ownScore ? Number(ownScore) : 0,
-          exactScores: exactById.get(opts.userId) ?? 0,
-          isOwn: true,
-        });
-      }
+    const total = ordered.length;
+    const ownRow = opts.userId
+      ? allRows.find((r) => r.userId === opts.userId) ?? null
+      : null;
+    const ownPosition = ownRow?.position ?? null;
+
+    const rows = allRows.slice(0, limit);
+    // Keep the viewer visible even when they fall outside the top `limit`.
+    if (ownRow && !rows.some((r) => r.userId === ownRow.userId)) {
+      rows.push(ownRow);
     }
 
     return { rows, ownPosition, total, poolName };
