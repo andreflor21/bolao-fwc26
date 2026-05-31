@@ -27,3 +27,4 @@ Thumbs.db
 
 *.tsbuildinfo
 .pnpm-store/
+test-results/

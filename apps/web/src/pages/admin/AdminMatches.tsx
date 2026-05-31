@@ -1,8 +1,67 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState, type ChangeEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError } from '../../lib/api';
 import { flagUrl } from '../../lib/flags';
 import type { MatchDto } from '@bolao/shared';
+
+interface BulkResultRow {
+  matchId: string;
+  homeGoals: number;
+  awayGoals: number;
+}
+
+interface BulkSummary {
+  applied: number;
+  noChange: number;
+  errors: Array<{ matchId: string; message: string }>;
+}
+
+/** Data BRT sem vírgula (pro CSV continuar parseável por split simples). */
+const CSV_DATE = new Intl.DateTimeFormat('pt-BR', {
+  day: '2-digit',
+  month: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+  timeZone: 'America/Sao_Paulo',
+});
+
+const CSV_HEADER = 'match_id,grupo,rodada,data,mandante,visitante,gols_mandante,gols_visitante';
+
+function buildCsv(matches: MatchDto[]): string {
+  const lines = matches.map((m) => {
+    const data = CSV_DATE.format(new Date(m.kickoffAt)).replace(',', '');
+    return [
+      m.id,
+      m.groupLetter ?? '',
+      m.roundNumber ?? '',
+      data,
+      m.homeTeamName ?? m.homeTeamCode ?? '',
+      m.awayTeamName ?? m.awayTeamCode ?? '',
+      m.homeGoalsOfficial ?? '',
+      m.awayGoalsOfficial ?? '',
+    ].join(',');
+  });
+  return [CSV_HEADER, ...lines].join('\n');
+}
+
+/** Parser simples: campos sem vírgula (UUID, números, nomes de país). */
+function parseCsv(text: string): BulkResultRow[] {
+  const rows: BulkResultRow[] = [];
+  const lines = text.split(/\r?\n/).filter((l) => l.trim().length > 0);
+  for (const line of lines) {
+    const cols = line.split(',');
+    const matchId = cols[0]?.trim();
+    if (!matchId || matchId === 'match_id') continue; // pula header
+    const gm = cols[6]?.trim();
+    const gv = cols[7]?.trim();
+    if (gm === undefined || gm === '' || gv === undefined || gv === '') continue; // sem placar
+    const homeGoals = Number.parseInt(gm, 10);
+    const awayGoals = Number.parseInt(gv, 10);
+    if (Number.isNaN(homeGoals) || Number.isNaN(awayGoals)) continue;
+    rows.push({ matchId, homeGoals, awayGoals });
+  }
+  return rows;
+}
 
 interface RegisterPreview {
   applied: false;
@@ -53,11 +112,56 @@ export function AdminMatches() {
   const [preview, setPreview] = useState<{ match: MatchDto; data: RegisterPreview['preview'] } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [bulkSummary, setBulkSummary] = useState<BulkSummary | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
 
   const matchesQuery = useQuery({
     queryKey: ['matches', 'group-stage'],
     queryFn: () => api<MatchDto[]>('/matches/group-stage'),
   });
+
+  const importMutation = useMutation({
+    mutationFn: (results: BulkResultRow[]) =>
+      api<BulkSummary>('/admin/matches/bulk-results', {
+        method: 'POST',
+        body: JSON.stringify({ results }),
+      }),
+    onSuccess: (sum) => {
+      setBulkSummary(sum);
+      qc.invalidateQueries({ queryKey: ['matches', 'group-stage'] });
+      qc.invalidateQueries({ queryKey: ['ranking'] });
+      qc.invalidateQueries({ queryKey: ['prizes'] });
+    },
+    onError: (e: unknown) => setError(e instanceof ApiError ? e.message : (e as Error).message),
+  });
+
+  function exportCsv() {
+    const blob = new Blob([buildCsv(matchesQuery.data ?? [])], {
+      type: 'text/csv;charset=utf-8',
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'jogos-copa-2026.csv';
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function onImportFile(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setError(null);
+    setBulkSummary(null);
+    file.text().then((txt) => {
+      const rows = parseCsv(txt);
+      if (rows.length === 0) {
+        setError('Nenhum placar preenchido no CSV (colunas gols_mandante/gols_visitante).');
+        return;
+      }
+      importMutation.mutate(rows);
+    });
+  }
 
   const previewMutation = useMutation({
     mutationFn: async (input: { matchId: string; homeGoals: number; awayGoals: number }) => {
@@ -164,7 +268,55 @@ export function AdminMatches() {
           Registre o placar oficial de cada jogo. Antes de aplicar, veja o impacto:
           quantos palpites são pontuados e como.
         </p>
+        <div className="flex flex-wrap items-center gap-2 mt-4">
+          <button onClick={exportCsv} className="btn-secondary text-xs">
+            ⬇️ Exportar CSV (todos os jogos)
+          </button>
+          <button
+            onClick={() => fileRef.current?.click()}
+            className="btn-secondary text-xs"
+            disabled={importMutation.isPending}
+          >
+            {importMutation.isPending ? 'Importando...' : '⬆️ Importar CSV (resultados em lote)'}
+          </button>
+          <input
+            ref={fileRef}
+            type="file"
+            accept=".csv,text/csv"
+            onChange={onImportFile}
+            className="hidden"
+          />
+          <span className="text-[11px] text-emerald-200/50">
+            Exporte, preencha gols_mandante/gols_visitante e reimporte.
+          </span>
+        </div>
       </header>
+
+      {bulkSummary && (
+        <div className="card border-emerald-400/40 bg-emerald-500/10 text-sm">
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-emerald-100">
+              ✅ Import: <strong>{bulkSummary.applied}</strong> aplicados ·{' '}
+              {bulkSummary.noChange} sem mudança · {bulkSummary.errors.length} erro(s)
+            </p>
+            <button
+              onClick={() => setBulkSummary(null)}
+              className="text-xs text-emerald-200/60 hover:text-emerald-100"
+            >
+              fechar
+            </button>
+          </div>
+          {bulkSummary.errors.length > 0 && (
+            <ul className="mt-2 space-y-1 text-xs text-amber-200/80 max-h-32 overflow-y-auto">
+              {bulkSummary.errors.slice(0, 10).map((er, i) => (
+                <li key={i}>
+                  <span className="font-mono">{er.matchId.slice(0, 8)}</span>: {er.message}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
 
       {toast && (
         <div className="card border-emerald-400/40 bg-emerald-500/10 text-emerald-100 text-sm">
