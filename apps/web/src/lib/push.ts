@@ -45,9 +45,28 @@ export function isPushAvailableInBrowser(): boolean {
 }
 
 async function registerServiceWorker(): Promise<ServiceWorkerRegistration> {
-  const existing = await navigator.serviceWorker.getRegistration('/sw.js');
-  if (existing) return existing;
-  return navigator.serviceWorker.register('/sw.js');
+  const reg =
+    (await navigator.serviceWorker.getRegistration('/sw.js')) ??
+    (await navigator.serviceWorker.register('/sw.js'));
+
+  // register()/getRegistration() resolvem enquanto o worker ainda pode estar
+  // em "installing"/"waiting". Chamar pushManager.subscribe() nessa janela
+  // lança "no active Service Worker". Aguarda o worker ficar ativo.
+  if (reg.active) return reg;
+
+  const worker = reg.installing ?? reg.waiting;
+  if (worker) {
+    await new Promise<void>((resolve) => {
+      if (worker.state === 'activated') return resolve();
+      worker.addEventListener('statechange', () => {
+        if (worker.state === 'activated') resolve();
+      });
+    });
+  } else {
+    await navigator.serviceWorker.ready;
+  }
+
+  return reg;
 }
 
 export interface UsePushResult {
