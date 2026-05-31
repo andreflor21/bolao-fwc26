@@ -343,11 +343,12 @@ Responda APENAS um JSON estrito (sem markdown, sem comentários, sem texto antes
 Regra de decisão (aplique em ordem):
 1. Se o arquivo NÃO é um comprovante Pix → "rejected".
 2. Se o valor difere do esperado → "rejected" (mesmo que o recebedor esteja certo). O reason deve dizer só isso.
-3. Identidade do recebedor: considere CORRETA se QUALQUER UM dos itens abaixo bater (basta um):
+3. Identidade do recebedor: considere CORRETA se QUALQUER UM destes bater (basta UM, NÃO exija todos):
+   - CPF/CNPJ do recebedor = CPF/CNPJ esperado (comparando só os dígitos) — este é o identificador DEFINITIVO
    - chave Pix do recebedor = chave esperada
-   - CPF/CNPJ do recebedor = CPF/CNPJ esperado
    - nome do recebedor ≈ nome esperado (case-insensitive, abreviações OK)
-   Se nenhum bater → "rejected".
+   ATENÇÃO: bancos quase sempre TRUNCAM o nome do recebedor no comprovante (ex.: "ANDRE FELIPE OLIVEIRA FLOR DES" é o começo de "ANDRE FELIPE OLIVEIRA FLOR DESENVOLVIMENTO DE SOFTWARE LTDA"). Se o CPF/CNPJ OU a chave Pix baterem, a identidade está CORRETA mesmo com o nome cortado/abreviado/parcial — NÃO recuse por causa disso.
+   Só marque "rejected" por identidade se o CPF/CNPJ for claramente de OUTRA pessoa E a chave também não bater.
 4. Tudo confere → "auto_confirmed".
 5. Arquivo ilegível, dados faltando ou ambiguidade → "manual_review" (nunca auto_confirme em dúvida).
 
@@ -401,7 +402,23 @@ Não exija TODOS os identificadores ao mesmo tempo — comprovantes brasileiros 
     } catch {
       throw new Error(`Claude returned non-JSON: ${cleaned.slice(0, 200)}`);
     }
-    return this.normaliseVerdict(parsed);
+    const verdict = this.normaliseVerdict(parsed);
+
+    // Bancos truncam o nome do recebedor no comprovante, o que fazia o modelo
+    // recusar pagamentos legítimos por "nome divergente". O CPF/CNPJ é o
+    // identificador definitivo: se o valor bate exatamente E o CPF/CNPJ extraído
+    // é igual ao esperado (ambos só dígitos), confirmamos independente do nome.
+    if (
+      verdict.status !== 'auto_confirmed' &&
+      this.recipientTaxId.length > 0 &&
+      verdict.extracted.amountCents === expectedAmountCents &&
+      (verdict.extracted.recipientTaxId ?? '') === this.recipientTaxId
+    ) {
+      verdict.status = 'auto_confirmed';
+      verdict.reason =
+        'Valor e CPF/CNPJ do recebedor conferem (nome truncado pelo banco é esperado).';
+    }
+    return verdict;
   }
 
   private normaliseVerdict(raw: unknown): ReceiptVerdict {
