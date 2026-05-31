@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   Logger,
   NotFoundException,
@@ -84,8 +85,27 @@ export class GuessService {
    * Upserts draft guesses for group-stage matches. Does NOT mark them as
    * submitted — submission requires a separate explicit call to `submit()`.
    */
+  /**
+   * Trava pós-finalização: uma vez submetidos, os palpites de grupo não podem
+   * mais ser alterados nem re-submetidos (independente do lock da Copa).
+   */
+  private async assertGroupNotSubmitted(userId: string): Promise<void> {
+    const submitted = await this.prisma.guess.findFirst({
+      where: { userId, submittedAt: { not: null } },
+      select: { id: true },
+    });
+    if (submitted) {
+      throw new ConflictException({
+        code: 'GROUP_ALREADY_SUBMITTED',
+        message:
+          'Seus palpites da fase de grupos já foram finalizados e não podem mais ser alterados.',
+      });
+    }
+  }
+
   async saveDraft(userId: string, body: SaveDraftGuessesBody): Promise<{ saved: number }> {
     await this.competition.assertOpen();
+    await this.assertGroupNotSubmitted(userId);
 
     const matchIds = body.guesses.map((g) => g.matchId);
     const validMatches = await this.prisma.match.findMany({
@@ -135,6 +155,7 @@ export class GuessService {
    */
   async submit(userId: string): Promise<{ submittedAt: string; matches: number }> {
     await this.competition.assertOpen();
+    await this.assertGroupNotSubmitted(userId);
 
     const allMatches = await this.prisma.match.findMany({
       where: { competitionId: FIFA_WC_2026_ID, stage: 'group' },

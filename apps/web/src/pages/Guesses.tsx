@@ -86,6 +86,9 @@ export function Guesses() {
   draftRef.current = draft;
 
   function updateGuess(matchId: string, homeGoals: number, awayGoals: number) {
+    // Trava: depois de finalizado (ou após o lock da Copa) não edita mais.
+    const d = guessesQuery.data;
+    if (d && (!d.isOpen || d.submittedAt)) return;
     setDraft((prev) => ({ ...prev, [matchId]: { homeGoals, awayGoals } }));
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => {
@@ -211,7 +214,7 @@ export function Guesses() {
                   key={m.id}
                   match={m}
                   guess={draft[m.id]}
-                  readOnly={isLocked}
+                  readOnly={isLocked || alreadySubmitted}
                   onChange={(home, away) => updateGuess(m.id, home, away)}
                 />
               ))}
@@ -223,21 +226,25 @@ export function Guesses() {
       <div className="fixed bottom-0 inset-x-0 z-20 border-t border-emerald-500/20 bg-midnight-900/90 backdrop-blur-md">
         <div className="max-w-6xl mx-auto px-4 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-3">
           <div className="text-xs text-emerald-200/70 text-center sm:text-left">
-            {isLocked
-              ? '🔒 Janela fechada — palpites travados'
-              : `Você preencheu ${filledCount}/72. Depois de submeter, não dá pra editar mais.`}
+            {alreadySubmitted
+              ? '🔒 Palpites finalizados — não podem mais ser alterados.'
+              : isLocked
+                ? '🔒 Janela fechada — palpites travados'
+                : `Você preencheu ${filledCount}/72. Depois de submeter, não dá pra editar mais.`}
           </div>
           <div className="flex flex-col sm:flex-row items-stretch gap-2 shrink-0">
             <Link to="/bracket" className="btn-secondary text-sm">
-              Pré-visualizar chaveamento
+              {alreadySubmitted ? 'Ver chaveamento' : 'Pré-visualizar chaveamento'}
             </Link>
-            <button
-              className="btn-gold text-sm"
-              disabled={isLocked || filledCount < 72 || submitMutation.isPending}
-              onClick={() => setShowConfirm(true)}
-            >
-              {submitMutation.isPending ? 'Enviando...' : 'Submeter palpites finais →'}
-            </button>
+            {!alreadySubmitted && (
+              <button
+                className="btn-gold text-sm"
+                disabled={isLocked || filledCount < 72 || submitMutation.isPending}
+                onClick={() => setShowConfirm(true)}
+              >
+                {submitMutation.isPending ? 'Enviando...' : 'Submeter palpites finais →'}
+              </button>
+            )}
           </div>
         </div>
       </div>
