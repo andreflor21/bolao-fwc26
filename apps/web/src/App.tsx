@@ -34,12 +34,6 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 }
 
 export function App() {
-  // Gatilho de diagnóstico do Sentry front: /?sentry-test=1 lança um erro no
-  // render → capturado pelo Sentry.ErrorBoundary (em main.tsx). No-op sem o
-  // param. Remover depois de validar.
-  if (new URLSearchParams(window.location.search).get('sentry-test') === '1') {
-    throw new Error('Sentry front test error — disparado via ?sentry-test=1 (ignorar)');
-  }
   return (
     <Layout>
       <Routes>
