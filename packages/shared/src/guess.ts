@@ -71,11 +71,29 @@ export interface KnockoutScoreEntryDto {
   advancesTeamCode?: string | null;
 }
 
+/** Pontos que o jogador fez num confronto de mata-mata (após o resultado). */
+export interface KnockoutFixtureScoreDto {
+  points: number;
+  teamPoints: number;
+  scorePoints: number;
+}
+
+/** Resultado oficial de um confronto de mata-mata. */
+export interface KnockoutOfficialResultDto {
+  homeGoals: number;
+  awayGoals: number;
+  advancesTeamCode: string | null;
+}
+
 export interface MyKnockoutGuessesDto {
   /** All 32 knockout fixtures (with predicted teams resolved). */
   fixtures: BracketFixtureDto[];
   /** Current per-fixture score predictions keyed by fixtureId. */
   scores: Record<string, KnockoutScoreEntryDto>;
+  /** Pontos que o jogador fez por confronto, keyed by fixtureId (após resultado). */
+  points: Record<string, KnockoutFixtureScoreDto>;
+  /** Resultado oficial por confronto, keyed by fixtureId (quando já lançado). */
+  officialResults: Record<string, KnockoutOfficialResultDto>;
   /** True once the user has finalised their knockout submission. */
   submittedAt: string | null;
   /** Whether the knockout phase still accepts edits. */

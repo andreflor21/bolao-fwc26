@@ -278,6 +278,8 @@ export class GuessService {
       return {
         fixtures: [],
         scores: {},
+        points: {},
+        officialResults: {},
         submittedAt: null,
         isOpen: locksAt > now,
         locksAt: locksAt.toISOString(),
@@ -285,9 +287,52 @@ export class GuessService {
       };
     }
 
+    // Pontos do mata-mata (materializados ao lançar cada resultado) + os
+    // resultados oficiais, pra UI mostrar "quanto fiz" por confronto.
+    const [koScores, koMatches] = await Promise.all([
+      this.prisma.knockoutGuessScore.findMany({
+        where: { userId, competitionId: FIFA_WC_2026_ID },
+        select: { fixtureId: true, points: true, teamPoints: true, scorePoints: true },
+      }),
+      this.prisma.match.findMany({
+        where: {
+          competitionId: FIFA_WC_2026_ID,
+          stage: { not: 'group' },
+          homeGoalsOfficial: { not: null },
+          awayGoalsOfficial: { not: null },
+        },
+        select: {
+          bracketFixtureId: true,
+          homeGoalsOfficial: true,
+          awayGoalsOfficial: true,
+          advancesTeamCode: true,
+        },
+      }),
+    ]);
+    const points: MyKnockoutGuessesDto['points'] = {};
+    for (const s of koScores) {
+      points[s.fixtureId] = {
+        points: s.points,
+        teamPoints: s.teamPoints,
+        scorePoints: s.scorePoints,
+      };
+    }
+    const officialResults: MyKnockoutGuessesDto['officialResults'] = {};
+    for (const m of koMatches) {
+      if (m.bracketFixtureId && m.homeGoalsOfficial !== null && m.awayGoalsOfficial !== null) {
+        officialResults[m.bracketFixtureId] = {
+          homeGoals: m.homeGoalsOfficial,
+          awayGoals: m.awayGoalsOfficial,
+          advancesTeamCode: m.advancesTeamCode ?? null,
+        };
+      }
+    }
+
     return {
       fixtures: payload.bracket.fixtures,
       scores: payload.knockoutScores ?? {},
+      points,
+      officialResults,
       submittedAt: payload.knockoutSubmittedAt,
       isOpen: locksAt > now,
       locksAt: locksAt.toISOString(),

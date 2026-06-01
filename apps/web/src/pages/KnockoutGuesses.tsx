@@ -5,6 +5,8 @@ import { api, ApiError } from '../lib/api';
 import { flagUrl } from '../lib/flags';
 import type {
   BracketFixtureDto,
+  KnockoutFixtureScoreDto,
+  KnockoutOfficialResultDto,
   KnockoutScoreEntryDto,
   KnockoutStage,
   MyKnockoutGuessesDto,
@@ -264,6 +266,8 @@ export function KnockoutGuesses() {
                   key={f.id}
                   fixture={f}
                   guess={draft[f.id]}
+                  score={data.points?.[f.id]}
+                  official={data.officialResults?.[f.id]}
                   readOnly={!data.isOpen}
                   onChange={(home, away) => updateScore(f, home, away)}
                   onAdvancesChange={(code) => updateAdvances(f.id, code)}
@@ -339,12 +343,22 @@ export function KnockoutGuesses() {
 interface CardProps {
   fixture: BracketFixtureDto;
   guess?: KnockoutScoreEntryDto;
+  score?: KnockoutFixtureScoreDto;
+  official?: KnockoutOfficialResultDto;
   onChange?: (homeGoals: number, awayGoals: number) => void;
   onAdvancesChange?: (advancesTeamCode: string) => void;
   readOnly?: boolean;
 }
 
-function KnockoutFixtureCard({ fixture, guess, onChange, onAdvancesChange, readOnly }: CardProps) {
+function KnockoutFixtureCard({
+  fixture,
+  guess,
+  score,
+  official,
+  onChange,
+  onAdvancesChange,
+  readOnly,
+}: CardProps) {
   const home = guess?.homeGoals ?? '';
   const away = guess?.awayGoals ?? '';
 
@@ -477,6 +491,38 @@ function KnockoutFixtureCard({ fixture, guess, onChange, onAdvancesChange, readO
                     {code}
                   </button>
                 ),
+            )}
+          </div>
+        </div>
+      )}
+
+      {official && (
+        <div className="mt-1 flex items-center justify-between gap-2 border-t border-emerald-500/15 pt-2">
+          <span className="text-[11px] uppercase tracking-wider text-emerald-300/60">
+            Resultado final
+          </span>
+          <div className="flex items-center gap-2">
+            <span className="font-display text-base text-white">
+              {official.homeGoals} <span className="text-emerald-300/40">×</span>{' '}
+              {official.awayGoals}
+            </span>
+            {official.advancesTeamCode && (
+              <span className="text-[10px] text-emerald-300/60">
+                avançou {official.advancesTeamCode}
+              </span>
+            )}
+            {score && (
+              <span
+                className={
+                  'inline-flex items-center rounded-full px-2 py-0.5 text-xs font-bold ' +
+                  (score.points > 0
+                    ? 'bg-gold-400/15 text-gold-200 border border-gold-400/30'
+                    : 'bg-midnight-800 text-emerald-200/60 border border-emerald-500/20')
+                }
+                title={`${score.teamPoints} pts de times + ${score.scorePoints} de placar`}
+              >
+                +{score.points} pts
+              </span>
             )}
           </div>
         </div>
