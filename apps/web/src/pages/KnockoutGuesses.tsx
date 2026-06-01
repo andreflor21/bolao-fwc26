@@ -5,6 +5,8 @@ import { api, ApiError } from '../lib/api';
 import { flagUrl } from '../lib/flags';
 import type {
   BracketFixtureDto,
+  KnockoutFixtureScoreDto,
+  KnockoutOfficialResultDto,
   KnockoutScoreEntryDto,
   KnockoutStage,
   MyKnockoutGuessesDto,
@@ -264,6 +266,8 @@ export function KnockoutGuesses() {
                   key={f.id}
                   fixture={f}
                   guess={draft[f.id]}
+                  score={data.points?.[f.id]}
+                  official={data.officialResults?.[f.id]}
                   readOnly={!data.isOpen}
                   onChange={(home, away) => updateScore(f, home, away)}
                   onAdvancesChange={(code) => updateAdvances(f.id, code)}
@@ -339,12 +343,22 @@ export function KnockoutGuesses() {
 interface CardProps {
   fixture: BracketFixtureDto;
   guess?: KnockoutScoreEntryDto;
+  score?: KnockoutFixtureScoreDto;
+  official?: KnockoutOfficialResultDto;
   onChange?: (homeGoals: number, awayGoals: number) => void;
   onAdvancesChange?: (advancesTeamCode: string) => void;
   readOnly?: boolean;
 }
 
-function KnockoutFixtureCard({ fixture, guess, onChange, onAdvancesChange, readOnly }: CardProps) {
+function KnockoutFixtureCard({
+  fixture,
+  guess,
+  score,
+  official,
+  onChange,
+  onAdvancesChange,
+  readOnly,
+}: CardProps) {
   const home = guess?.homeGoals ?? '';
   const away = guess?.awayGoals ?? '';
 
@@ -481,7 +495,59 @@ function KnockoutFixtureCard({ fixture, guess, onChange, onAdvancesChange, readO
           </div>
         </div>
       )}
+
+      {official && (
+        <div className="mt-1 border-t border-emerald-500/15 pt-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+          <span className="text-[11px] uppercase tracking-wider text-emerald-300/60">
+            Resultado final
+          </span>
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* Times REAIS que jogaram (podem diferir do palpite). */}
+            <span className="flex items-center gap-1.5 text-sm text-white">
+              <MiniFlag code={official.homeTeamCode} />
+              <span className="font-semibold">{official.homeTeamCode ?? '—'}</span>
+              <span className="font-display">
+                {official.homeGoals} <span className="text-emerald-300/40">×</span>{' '}
+                {official.awayGoals}
+              </span>
+              <span className="font-semibold">{official.awayTeamCode ?? '—'}</span>
+              <MiniFlag code={official.awayTeamCode} />
+            </span>
+            {official.advancesTeamCode && (
+              <span className="text-[10px] text-emerald-300/60">
+                avançou {official.advancesTeamCode}
+              </span>
+            )}
+            {score && (
+              <span
+                className={
+                  'inline-flex items-center rounded-full px-2 py-0.5 text-xs font-bold ' +
+                  (score.points > 0
+                    ? 'bg-gold-400/15 text-gold-200 border border-gold-400/30'
+                    : 'bg-midnight-800 text-emerald-200/60 border border-emerald-500/20')
+                }
+                title={`${score.teamPoints} pts de times + ${score.scorePoints} de placar`}
+              >
+                +{score.points} pts
+              </span>
+            )}
+          </div>
+        </div>
+      )}
     </div>
+  );
+}
+
+function MiniFlag({ code }: { code: string | null }) {
+  const url = flagUrl(code);
+  if (!url) return null;
+  return (
+    <img
+      src={url}
+      alt=""
+      loading="lazy"
+      className="w-5 h-3.5 object-cover rounded-[2px] ring-1 ring-black/20 shrink-0"
+    />
   );
 }
 

@@ -16,6 +16,7 @@ import {
   type KnockoutScoreEntryDto,
   type MyGuessesDto,
   type MyKnockoutGuessesDto,
+  type ScoreRule,
 } from '@bolao/shared';
 import { buildBracket } from '../domain/bracket/bracket-engine';
 import type { FifaRanks, GroupMatchResult } from '../domain/bracket/types';
@@ -54,6 +55,7 @@ export class GuessService {
         isDerived: true,
         submittedAt: true,
         updatedAt: true,
+        score: { select: { points: true, ruleApplied: true } },
       },
     });
 
@@ -67,6 +69,9 @@ export class GuessService {
         isDerived: g.isDerived,
         submittedAt: g.submittedAt?.toISOString() ?? null,
         updatedAt: g.updatedAt.toISOString(),
+        score: g.score
+          ? { points: g.score.points, ruleApplied: g.score.ruleApplied as ScoreRule }
+          : null,
       };
       if (g.submittedAt && (!earliestSubmittedAt || g.submittedAt < earliestSubmittedAt)) {
         earliestSubmittedAt = g.submittedAt;
@@ -237,6 +242,8 @@ export class GuessService {
         select: {
           id: true,
           groupLetter: true,
+          homeGoalsOfficial: true,
+          awayGoalsOfficial: true,
           homeTeam: { select: { code: true, seededRank: true } },
           awayTeam: { select: { code: true, seededRank: true } },
         },
@@ -248,12 +255,114 @@ export class GuessService {
       select: { matchId: true, homeGoals: true, awayGoals: true },
     });
     const guessByMatchId = new Map(userGuesses.map((g) => [g.matchId, g] as const));
-    return this.computeBracket(
+    const preview = this.computeBracket(
       allMatches,
       guessByMatchId,
       payload?.knockoutScores,
       payload?.manualTiebreakOrder,
     );
+    preview.official = await this.computeOfficialBracket(allMatches);
+    return preview;
+  }
+
+  /**
+   * Estado OFICIAL da competição a partir dos resultados reais: classificações
+   * reais dos grupos + melhores 3º reais + resultados reais do mata-mata.
+   * Reusa o mesmo motor `buildBracket` alimentado com os placares oficiais.
+   */
+  private async computeOfficialBracket(
+    groupMatchRows: Array<{
+      id: string;
+      groupLetter: string | null;
+      homeGoalsOfficial: number | null;
+      awayGoalsOfficial: number | null;
+      homeTeam: { code: string; seededRank: number } | null;
+      awayTeam: { code: string; seededRank: number } | null;
+    }>,
+  ): Promise<BracketPreviewDto['official']> {
+    const [teams, koMatches, competition] = await Promise.all([
+      this.prisma.team.findMany({
+        where: { competitionId: FIFA_WC_2026_ID },
+        select: { code: true, seededRank: true },
+      }),
+      this.prisma.match.findMany({
+        where: { competitionId: FIFA_WC_2026_ID, stage: { not: 'group' } },
+        select: {
+          bracketFixtureId: true,
+          homeGoalsOfficial: true,
+          awayGoalsOfficial: true,
+          advancesTeamCode: true,
+          homeTeam: { select: { code: true } },
+          awayTeam: { select: { code: true } },
+        },
+      }),
+      this.prisma.competition.findUnique({
+        where: { id: FIFA_WC_2026_ID },
+        select: { officialTiebreak: true },
+      }),
+    ]);
+
+    const fifaRanks: Record<string, number> = {};
+    for (const t of teams) fifaRanks[t.code] = t.seededRank;
+
+    const officialGroupMatches = groupMatchRows
+      .filter(
+        (m) =>
+          m.groupLetter &&
+          m.homeTeam &&
+          m.awayTeam &&
+          m.homeGoalsOfficial !== null &&
+          m.awayGoalsOfficial !== null,
+      )
+      .map((m) => ({
+        groupLetter: m.groupLetter as GroupLetter,
+        homeTeamCode: m.homeTeam!.code,
+        awayTeamCode: m.awayTeam!.code,
+        homeGoals: m.homeGoalsOfficial as number,
+        awayGoals: m.awayGoalsOfficial as number,
+      }));
+
+    const officialKnockoutScores: Record<
+      string,
+      { homeGoals: number; awayGoals: number; advancesTeamCode: string | null }
+    > = {};
+    const results: NonNullable<BracketPreviewDto['official']>['results'] = {};
+    for (const m of koMatches) {
+      if (
+        m.bracketFixtureId &&
+        m.homeGoalsOfficial !== null &&
+        m.awayGoalsOfficial !== null
+      ) {
+        officialKnockoutScores[m.bracketFixtureId] = {
+          homeGoals: m.homeGoalsOfficial,
+          awayGoals: m.awayGoalsOfficial,
+          advancesTeamCode: m.advancesTeamCode ?? null,
+        };
+        results[m.bracketFixtureId] = {
+          fixtureId: m.bracketFixtureId,
+          homeTeamCode: m.homeTeam?.code ?? null,
+          awayTeamCode: m.awayTeam?.code ?? null,
+          homeGoals: m.homeGoalsOfficial,
+          awayGoals: m.awayGoalsOfficial,
+          advancesTeamCode: m.advancesTeamCode ?? null,
+        };
+      }
+    }
+
+    const manual =
+      (competition?.officialTiebreak as Partial<Record<GroupLetter, string[]>> | null) ?? {};
+    const official = buildBracket({
+      groupMatches: officialGroupMatches,
+      fifaRanks,
+      knockoutScores: officialKnockoutScores,
+      manualTiebreakOrder: manual,
+    });
+
+    return {
+      groups: official.groups,
+      bestThirds: official.bestThirds,
+      results,
+    };
   }
 
   /**
@@ -273,6 +382,8 @@ export class GuessService {
       return {
         fixtures: [],
         scores: {},
+        points: {},
+        officialResults: {},
         submittedAt: null,
         isOpen: locksAt > now,
         locksAt: locksAt.toISOString(),
@@ -280,9 +391,56 @@ export class GuessService {
       };
     }
 
+    // Pontos do mata-mata (materializados ao lançar cada resultado) + os
+    // resultados oficiais, pra UI mostrar "quanto fiz" por confronto.
+    const [koScores, koMatches] = await Promise.all([
+      this.prisma.knockoutGuessScore.findMany({
+        where: { userId, competitionId: FIFA_WC_2026_ID },
+        select: { fixtureId: true, points: true, teamPoints: true, scorePoints: true },
+      }),
+      this.prisma.match.findMany({
+        where: {
+          competitionId: FIFA_WC_2026_ID,
+          stage: { not: 'group' },
+          homeGoalsOfficial: { not: null },
+          awayGoalsOfficial: { not: null },
+        },
+        select: {
+          bracketFixtureId: true,
+          homeGoalsOfficial: true,
+          awayGoalsOfficial: true,
+          advancesTeamCode: true,
+          homeTeam: { select: { code: true } },
+          awayTeam: { select: { code: true } },
+        },
+      }),
+    ]);
+    const points: MyKnockoutGuessesDto['points'] = {};
+    for (const s of koScores) {
+      points[s.fixtureId] = {
+        points: s.points,
+        teamPoints: s.teamPoints,
+        scorePoints: s.scorePoints,
+      };
+    }
+    const officialResults: MyKnockoutGuessesDto['officialResults'] = {};
+    for (const m of koMatches) {
+      if (m.bracketFixtureId && m.homeGoalsOfficial !== null && m.awayGoalsOfficial !== null) {
+        officialResults[m.bracketFixtureId] = {
+          homeTeamCode: m.homeTeam?.code ?? null,
+          awayTeamCode: m.awayTeam?.code ?? null,
+          homeGoals: m.homeGoalsOfficial,
+          awayGoals: m.awayGoalsOfficial,
+          advancesTeamCode: m.advancesTeamCode ?? null,
+        };
+      }
+    }
+
     return {
       fixtures: payload.bracket.fixtures,
       scores: payload.knockoutScores ?? {},
+      points,
+      officialResults,
       submittedAt: payload.knockoutSubmittedAt,
       isOpen: locksAt > now,
       locksAt: locksAt.toISOString(),

@@ -104,6 +104,11 @@ export function Guesses() {
     if (debounceRef.current) clearTimeout(debounceRef.current);
   }, []);
 
+  function goToRound(r: 1 | 2 | 3) {
+    setActiveRound(r);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
   const matchesByRound = useMemo(() => {
     const acc: Record<1 | 2 | 3, MatchDto[]> = { 1: [], 2: [], 3: [] };
     for (const m of matchesQuery.data ?? []) {
@@ -214,6 +219,7 @@ export function Guesses() {
                   key={m.id}
                   match={m}
                   guess={draft[m.id]}
+                  score={guessesQuery.data?.guesses[m.id]?.score}
                   readOnly={isLocked || alreadySubmitted}
                   onChange={(home, away) => updateGuess(m.id, home, away)}
                 />
@@ -222,6 +228,27 @@ export function Guesses() {
           </section>
         );
       })}
+
+      {/* Navegação de rodada no fim da lista (espelha as abas do topo). */}
+      <div className="flex items-center justify-between gap-3 border-t border-emerald-500/15 pt-6">
+        <button
+          onClick={() => goToRound(Math.max(1, activeRound - 1) as 1 | 2 | 3)}
+          disabled={activeRound <= 1}
+          className="btn-secondary text-sm disabled:opacity-30"
+        >
+          ← Rodada anterior
+        </button>
+        <span className="text-xs uppercase tracking-widest text-emerald-300/60">
+          Rodada {activeRound} de 3
+        </span>
+        <button
+          onClick={() => goToRound(Math.min(3, activeRound + 1) as 1 | 2 | 3)}
+          disabled={activeRound >= 3}
+          className="btn-gold text-sm disabled:opacity-30"
+        >
+          Próxima rodada →
+        </button>
+      </div>
 
       <div className="fixed bottom-0 inset-x-0 z-20 border-t border-emerald-500/20 bg-midnight-900/90 backdrop-blur-md">
         <div className="max-w-6xl mx-auto px-4 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-3">

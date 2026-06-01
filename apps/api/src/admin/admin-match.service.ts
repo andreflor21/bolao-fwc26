@@ -8,6 +8,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { scoreGuess, officialResultHash } from '../domain/scoring/score-engine';
 import { RankingService } from '../ranking/ranking.service';
 import { PrizeService } from '../prize/prize.service';
+import { KnockoutService } from './knockout.service';
 import type { RegisterMatchResultBody } from './dto/register-result.dto';
 
 export interface RegisterResultPreview {
@@ -32,6 +33,10 @@ export interface RegisterResultApplied {
   scored: number;
   totalPointsAwarded: number;
   noChange: boolean;
+  /** Set quando o 72º resultado dispara a geração do bracket real. */
+  knockoutGenerated?: boolean;
+  /** Grupos com empate que o admin precisa ordenar manualmente, se houver. */
+  needsManualTiebreak?: Array<{ groupLetter: string; teamCodes: string[] }>;
 }
 
 @Injectable()
@@ -42,6 +47,7 @@ export class AdminMatchService {
     private readonly prisma: PrismaService,
     private readonly ranking: RankingService,
     private readonly prize: PrizeService,
+    private readonly knockout: KnockoutService,
   ) {}
 
   async registerResult(
@@ -168,12 +174,31 @@ export class AdminMatchService {
       );
     }
 
+    // Quando o último resultado de grupo entra, gera o chaveamento REAL da R32
+    // automaticamente. Best-effort: empate irresolúvel devolve a lista de
+    // grupos que precisam de ordem manual (admin resolve em /admin/knockout).
+    let knockoutGenerated: boolean | undefined;
+    let needsManualTiebreak:
+      | Array<{ groupLetter: string; teamCodes: string[] }>
+      | undefined;
+    try {
+      if (await this.knockout.isGroupStageComplete()) {
+        const res = await this.knockout.recomputeOfficialBracket({ requireComplete: true });
+        knockoutGenerated = res.generated;
+        needsManualTiebreak = res.needsManualTiebreak;
+      }
+    } catch (e) {
+      this.logger.warn(`Knockout auto-generation failed: ${(e as Error).message}`);
+    }
+
     return {
       applied: true,
       matchId,
       scored: scored.length,
       totalPointsAwarded,
       noChange: false,
+      knockoutGenerated,
+      needsManualTiebreak,
     };
   }
 

@@ -212,6 +212,9 @@ export class PixFallbackService {
       data: {
         pixReceiptStatus: PixReceiptStatus.analyzing,
         pixReceiptUploadedAt: new Date(),
+        // Persiste o comprovante enviado para o admin poder revisar depois.
+        pixReceiptImage: file.buffer.toString('base64'),
+        pixReceiptMime: file.mimetype,
       },
     });
 
