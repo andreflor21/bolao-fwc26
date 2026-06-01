@@ -28,3 +28,10 @@ Thumbs.db
 *.tsbuildinfo
 .pnpm-store/
 test-results/
+
+# Saída de build TS dentro de packages/shared/src — o Vite resolve @bolao/shared
+# para esse diretório, e .js compilados aqui mascaram os .ts (quebra o build).
+# O build real do shared vai para packages/shared/dist (já ignorado por dist/).
+packages/shared/src/*.js
+packages/shared/src/*.js.map
+packages/shared/src/*.d.ts
