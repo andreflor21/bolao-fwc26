@@ -7,6 +7,8 @@ import { AdminClosureService } from './admin-closure.service';
 import { AdminPixController } from './admin-pix.controller';
 import { AdminPixService } from './admin-pix.service';
 import { AdminPrizeController } from './admin-prize.controller';
+import { KnockoutController } from './knockout.controller';
+import { KnockoutService } from './knockout.service';
 import { RankingModule } from '../ranking/ranking.module';
 import { PrizeModule } from '../prize/prize.module';
 
@@ -18,8 +20,9 @@ import { PrizeModule } from '../prize/prize.module';
     AdminClosureController,
     AdminPrizeController,
     AdminPixController,
+    KnockoutController,
   ],
-  providers: [AdminMatchService, AdminClosureService, AdminPixService],
+  providers: [AdminMatchService, AdminClosureService, AdminPixService, KnockoutService],
   exports: [AdminMatchService, AdminClosureService],
 })
 export class AdminModule {}

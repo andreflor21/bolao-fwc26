@@ -24,6 +24,7 @@ function AdminLayout() {
             PAINEL ADMIN
           </p>
           <SidebarLink to="/admin/matches" label="Resultados" icon="📊" />
+          <SidebarLink to="/admin/knockout" label="Mata-mata" icon="🏟️" />
           <SidebarLink to="/admin/prizes" label="Premiação" icon="🏆" />
           <SidebarLink to="/admin/closure" label="Encerramento" icon="🔒" />
           <SidebarLink to="/admin/pix" label="Pix" icon="💸" />

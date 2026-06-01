@@ -79,6 +79,7 @@ model User {
   bracketPredictions BracketPrediction[]
   prizePayouts      PrizePayout[]
   pushSubscriptions PushSubscription[]
+  knockoutScores    KnockoutGuessScore[]
 
   @@index([createdAt])
   @@map("users")
@@ -120,6 +121,9 @@ model Competition {
   closureStatus     ClosureStatus  @default(open) @map("closure_status")
   prizePoolCents    Int            @default(0) @map("prize_pool_cents")
   prizeDistribution Json?          @map("prize_distribution")
+  /** Ordem manual de desempate OFICIAL por grupo, quando os critérios FIFA
+      não resolvem. { "A": ["BRA","SUI"], ... }. Usado ao gerar a R32 real. */
+  officialTiebreak  Json?          @map("official_tiebreak")
   createdAt         DateTime       @default(now()) @map("created_at")
 
   teams              Team[]
@@ -156,11 +160,17 @@ model Match {
   stage               MatchStage
   groupLetter         String?    @map("group_letter")
   roundNumber         Int?       @map("round_number")
+  /** Identificador estável da partida do mata-mata no mapa do bracket
+      (ex.: "R32-73", "F-104"). Null para jogos de fase de grupos. */
+  bracketFixtureId    String?    @map("bracket_fixture_id")
   kickoffAt           DateTime   @map("kickoff_at")
   homeTeamId          String?    @map("home_team_id") @db.Uuid
   awayTeamId          String?    @map("away_team_id") @db.Uuid
   homeGoalsOfficial   Int?       @map("home_goals_official")
   awayGoalsOfficial   Int?       @map("away_goals_official")
+  /** Código do time que avançou (mata-mata). Necessário quando o placar
+      oficial termina empatado e a vaga é decidida nos pênaltis. */
+  advancesTeamCode    String?    @map("advances_team_code")
   resultLockedAt      DateTime?  @map("result_locked_at")
   city                String?
 
@@ -169,6 +179,7 @@ model Match {
   awayTeam    Team?       @relation("AwayTeam", fields: [awayTeamId], references: [id])
   guesses     Guess[]
 
+  @@unique([competitionId, bracketFixtureId])
   @@index([competitionId, stage])
   @@index([kickoffAt])
   @@map("matches")
@@ -269,6 +280,31 @@ model GuessScore {
   guess Guess @relation(fields: [guessId], references: [id], onDelete: Cascade)
 
   @@map("guess_scores")
+}
+
+/**
+ * Pontuação de um palpite de mata-mata, por jogador e por confronto do
+ * bracket. Diferente de `GuessScore` (fase de grupos, ligado a `Guess`):
+ * os palpites de KO vivem em `BracketPrediction.payload`, então a pontuação
+ * é materializada aqui ao lançar o resultado oficial de cada confronto.
+ */
+model KnockoutGuessScore {
+  id            String   @id @default(uuid()) @db.Uuid
+  userId        String   @map("user_id") @db.Uuid
+  competitionId String   @map("competition_id")
+  /** Confronto do bracket (ex.: "R32-73", "F-104"). */
+  fixtureId     String   @map("fixture_id")
+  points        Int
+  teamPoints    Int      @map("team_points")
+  scorePoints   Int      @map("score_points")
+  computedAt    DateTime @default(now()) @map("computed_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, fixtureId])
+  @@index([userId])
+  @@index([competitionId])
+  @@map("knockout_guess_scores")
 }
 
 model BracketPrediction {

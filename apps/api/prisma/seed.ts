@@ -3,6 +3,7 @@ import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { seedTeams } from './seeds/teams';
 import { seedGroupMatches } from './seeds/matches';
+import { seedKnockoutMatches } from './seeds/knockout-matches';
 
 if (!process.env.DATABASE_URL) {
   throw new Error('DATABASE_URL is required to run seed');
@@ -43,6 +44,9 @@ async function main() {
 
   const matchCount = await seedGroupMatches(prisma, competition.id);
   console.log(`  ✔ Group matches: ${matchCount}`);
+
+  const knockoutCount = await seedKnockoutMatches(prisma, competition.id);
+  console.log(`  ✔ Knockout matches: ${knockoutCount}`);
 
   console.log('✅ Seed completo');
 }

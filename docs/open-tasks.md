@@ -341,6 +341,36 @@ nas resoluções: 360×800 (Android low-end), 390×844 (iPhone 14), 768×1024
 
 ---
 
+## Mata-mata real ✅ (entregue 2026-05-31)
+
+Após os 72 resultados oficiais, o sistema gera o chaveamento REAL e permite
+lançar/pontuar o mata-mata. Ranking ÚNICO (grupos + KO somados).
+
+- Schema: `Match.bracketFixtureId` + `advances_team_code`, `Competition.officialTiebreak`,
+  nova tabela `knockout_guess_scores` (migration `20260531_add_knockout_stage`).
+- Seed das 32 partidas KO ([prisma/seeds/knockout-matches.ts](apps/api/prisma/seeds/knockout-matches.ts))
+  — cidades/horários do organizador, datas FIFA (ajustáveis num arquivo só).
+- `KnockoutService` ([admin/knockout.service.ts](apps/api/src/admin/knockout.service.ts)):
+  reusa `buildBracket()` com os resultados OFICIAIS pra resolver/propagar o
+  bracket; gera a R32 automaticamente ao completar os 72; registra resultado
+  KO com propagação do vencedor + pontuação por jogador.
+- Pontuação KO pura ([domain/scoring/knockout-player-scoring.ts](apps/api/src/domain/scoring/knockout-player-scoring.ts))
+  reusando o engine `scoreKnockoutGuess` (+15/time no slot + placar, máx 40).
+- Ranking agora soma `guess_scores` (grupos) + `knockout_guess_scores` (KO).
+- Empate de classificação irresolúvel → admin define a ordem manual
+  (`POST /admin/knockout/tiebreak`) antes de gerar.
+- Endpoints admin: `GET /admin/knockout/fixtures`, `POST /admin/knockout/recompute`,
+  `POST /admin/knockout/tiebreak`, `PUT /admin/knockout/:matchId/result`.
+- UI admin `/admin/knockout` ([AdminKnockout.tsx](apps/web/src/pages/admin/AdminKnockout.tsx)):
+  confrontos por fase, lançar placar (com "quem avança" em empate), propaga sozinho.
+
+**Pendente / a conferir depois:**
+- DATAS dos jogos KO no seed são aproximadas (calendário FIFA) — o organizador
+  passou só cidade+horário local; ajustar as datas exatas em `knockout-matches.ts`
+  quando confirmadas. (Não afeta pontuação/premiação — apenas exibição/ordem.)
+- Front do jogador (`/knockout-guesses` / `/bracket`) já mostra o bracket; pode
+  ganhar destaque do "resultado oficial vs seu palpite" como na fase de grupos.
+
 ## Chunk 5 — Próximas features (backlog, pedido em 2026-05-31)
 
 ### Task 59 — Ver palpites de outros jogadores

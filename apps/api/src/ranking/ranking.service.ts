@@ -48,12 +48,21 @@ export class RankingService {
    * belongs to. Idempotent.
    */
   async recomputeForUser(userId: string): Promise<void> {
-    const scores = await this.prisma.guessScore.findMany({
-      where: { guess: { userId } },
-      select: { points: true, ruleApplied: true },
-    });
+    const [scores, knockoutScores] = await Promise.all([
+      this.prisma.guessScore.findMany({
+        where: { guess: { userId } },
+        select: { points: true, ruleApplied: true },
+      }),
+      this.prisma.knockoutGuessScore.findMany({
+        where: { userId },
+        select: { points: true },
+      }),
+    ]);
 
-    const totalPoints = scores.reduce((sum, s) => sum + s.points, 0);
+    // Ranking único: pontos da fase de grupos + pontos do mata-mata.
+    const groupPoints = scores.reduce((sum, s) => sum + s.points, 0);
+    const koPoints = knockoutScores.reduce((sum, s) => sum + s.points, 0);
+    const totalPoints = groupPoints + koPoints;
     const exactCount = scores.filter((s) => s.ruleApplied === 'EXACT_SCORE').length;
 
     const memberships = await this.prisma.sidePoolMember.findMany({
