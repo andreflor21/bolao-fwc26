@@ -10,13 +10,13 @@ import type { PrismaClient } from '@prisma/client';
  * as classificações e preenche os times reais da R32; cada rodada seguinte é
  * preenchida ao lançar os resultados.
  *
- * Datas/horários: cidades e horários locais informados pelo organizador; as
- * DATAS seguem o calendário oficial FIFA 2026 (R32 28/jun–3/jul, oitavas
- * 4–7/jul, quartas 9–11/jul, semis 14–15/jul, 3º 18/jul, final 19/jul). Como
- * são apenas cosméticas (não afetam pontuação nem premiação — o lock dos
- * palpites KO é por env), ajuste livremente aqui se necessário.
- *
- * `kickoffUtc` já convertido do horário local de cada sede para UTC.
+ * Datas, sedes e horários locais oficiais informados pelo organizador.
+ * `kickoffUtc` é a conversão do horário local de cada sede para UTC, usando
+ * o fuso de verão de jun/jul 2026:
+ *   Pacífico (LA, Seattle, Vancouver, SF) = UTC-7 (PDT)
+ *   Central  (Houston, Dallas, Kansas City) = UTC-5 (CDT)
+ *   Leste    (Boston, NY/NJ, Atlanta, Toronto, Miami, Philadelphia) = UTC-4 (EDT)
+ *   México   (Monterrey, Cidade do México) = UTC-6 (sem horário de verão)
  */
 
 type SeedKnockout = {
@@ -31,48 +31,48 @@ type SeedKnockout = {
 
 const KNOCKOUTS: SeedKnockout[] = [
   // ── Rodada de 32 (16 avos) — 28 jun a 3 jul ──
-  { fixtureId: 'R32-73', stage: 'r32', city: 'Los Angeles', localTime: '19:00 PT', kickoffUtc: '2026-06-29T02:00:00Z' },
-  { fixtureId: 'R32-74', stage: 'r32', city: 'Boston', localTime: '19:00 ET', kickoffUtc: '2026-06-28T23:00:00Z' },
-  { fixtureId: 'R32-75', stage: 'r32', city: 'Monterrey', localTime: '19:00 CT', kickoffUtc: '2026-06-29T01:00:00Z' },
-  { fixtureId: 'R32-76', stage: 'r32', city: 'Houston', localTime: '20:00 CT', kickoffUtc: '2026-06-30T01:00:00Z' },
-  { fixtureId: 'R32-77', stage: 'r32', city: 'New York / New Jersey', localTime: '19:00 ET', kickoffUtc: '2026-06-29T23:00:00Z' },
-  { fixtureId: 'R32-78', stage: 'r32', city: 'Dallas', localTime: '20:00 CT', kickoffUtc: '2026-06-30T01:00:00Z' },
-  { fixtureId: 'R32-79', stage: 'r32', city: 'Cidade do México', localTime: '19:00 CT', kickoffUtc: '2026-07-01T01:00:00Z' },
-  { fixtureId: 'R32-80', stage: 'r32', city: 'Vancouver', localTime: '19:00 PT', kickoffUtc: '2026-07-01T02:00:00Z' },
-  { fixtureId: 'R32-81', stage: 'r32', city: 'Atlanta', localTime: '19:00 ET', kickoffUtc: '2026-06-30T23:00:00Z' },
-  { fixtureId: 'R32-82', stage: 'r32', city: 'Seattle', localTime: '19:00 PT', kickoffUtc: '2026-07-02T02:00:00Z' },
-  { fixtureId: 'R32-83', stage: 'r32', city: 'Toronto', localTime: '19:00 ET', kickoffUtc: '2026-07-01T23:00:00Z' },
-  { fixtureId: 'R32-84', stage: 'r32', city: 'Guadalajara', localTime: '19:00 CT', kickoffUtc: '2026-07-02T01:00:00Z' },
-  { fixtureId: 'R32-85', stage: 'r32', city: 'Philadelphia', localTime: '19:00 ET', kickoffUtc: '2026-07-02T23:00:00Z' },
-  { fixtureId: 'R32-86', stage: 'r32', city: 'Kansas City', localTime: '19:00 CT', kickoffUtc: '2026-07-03T00:00:00Z' },
-  { fixtureId: 'R32-87', stage: 'r32', city: 'Miami', localTime: '19:00 ET', kickoffUtc: '2026-07-03T23:00:00Z' },
-  { fixtureId: 'R32-88', stage: 'r32', city: 'San Francisco Bay Area', localTime: '19:00 PT', kickoffUtc: '2026-07-04T02:00:00Z' },
+  { fixtureId: 'R32-73', stage: 'r32', city: 'Los Angeles', localTime: '28/06 15:00 PT', kickoffUtc: '2026-06-28T22:00:00Z' },
+  { fixtureId: 'R32-74', stage: 'r32', city: 'Boston', localTime: '29/06 16:30 ET', kickoffUtc: '2026-06-29T20:30:00Z' },
+  { fixtureId: 'R32-75', stage: 'r32', city: 'Monterrey', localTime: '29/06 21:00 MX', kickoffUtc: '2026-06-30T03:00:00Z' },
+  { fixtureId: 'R32-76', stage: 'r32', city: 'Houston', localTime: '29/06 13:00 CT', kickoffUtc: '2026-06-29T18:00:00Z' },
+  { fixtureId: 'R32-77', stage: 'r32', city: 'New York / New Jersey', localTime: '30/06 17:00 ET', kickoffUtc: '2026-06-30T21:00:00Z' },
+  { fixtureId: 'R32-78', stage: 'r32', city: 'Dallas', localTime: '30/06 13:00 CT', kickoffUtc: '2026-06-30T18:00:00Z' },
+  { fixtureId: 'R32-79', stage: 'r32', city: 'Cidade do México', localTime: '30/06 21:00 MX', kickoffUtc: '2026-07-01T03:00:00Z' },
+  { fixtureId: 'R32-80', stage: 'r32', city: 'Atlanta', localTime: '01/07 12:00 ET', kickoffUtc: '2026-07-01T16:00:00Z' },
+  { fixtureId: 'R32-81', stage: 'r32', city: 'San Francisco Bay Area', localTime: '01/07 20:00 PT', kickoffUtc: '2026-07-02T03:00:00Z' },
+  { fixtureId: 'R32-82', stage: 'r32', city: 'Seattle', localTime: '01/07 16:00 PT', kickoffUtc: '2026-07-01T23:00:00Z' },
+  { fixtureId: 'R32-83', stage: 'r32', city: 'Toronto', localTime: '02/07 19:00 ET', kickoffUtc: '2026-07-02T23:00:00Z' },
+  { fixtureId: 'R32-84', stage: 'r32', city: 'Los Angeles', localTime: '02/07 15:00 PT', kickoffUtc: '2026-07-02T22:00:00Z' },
+  { fixtureId: 'R32-85', stage: 'r32', city: 'Vancouver', localTime: '02/07 23:00 PT', kickoffUtc: '2026-07-03T06:00:00Z' },
+  { fixtureId: 'R32-86', stage: 'r32', city: 'Miami', localTime: '03/07 18:00 ET', kickoffUtc: '2026-07-03T22:00:00Z' },
+  { fixtureId: 'R32-87', stage: 'r32', city: 'Kansas City', localTime: '03/07 21:30 CT', kickoffUtc: '2026-07-04T02:30:00Z' },
+  { fixtureId: 'R32-88', stage: 'r32', city: 'Dallas', localTime: '03/07 14:00 CT', kickoffUtc: '2026-07-03T19:00:00Z' },
 
   // ── Oitavas — 4 a 7 jul ──
-  { fixtureId: 'R16-89', stage: 'r16', city: 'Houston', localTime: '19:00 CT', kickoffUtc: '2026-07-05T00:00:00Z' },
-  { fixtureId: 'R16-90', stage: 'r16', city: 'Philadelphia', localTime: '19:00 ET', kickoffUtc: '2026-07-04T23:00:00Z' },
-  { fixtureId: 'R16-91', stage: 'r16', city: 'Dallas', localTime: '19:00 CT', kickoffUtc: '2026-07-06T00:00:00Z' },
-  { fixtureId: 'R16-92', stage: 'r16', city: 'Cidade do México', localTime: '19:00 CT', kickoffUtc: '2026-07-05T01:00:00Z' },
-  { fixtureId: 'R16-93', stage: 'r16', city: 'New York / New Jersey', localTime: '19:00 ET', kickoffUtc: '2026-07-05T23:00:00Z' },
-  { fixtureId: 'R16-94', stage: 'r16', city: 'Seattle', localTime: '19:00 PT', kickoffUtc: '2026-07-07T02:00:00Z' },
-  { fixtureId: 'R16-95', stage: 'r16', city: 'Atlanta', localTime: '19:00 ET', kickoffUtc: '2026-07-06T23:00:00Z' },
-  { fixtureId: 'R16-96', stage: 'r16', city: 'Vancouver', localTime: '19:00 PT', kickoffUtc: '2026-07-08T02:00:00Z' },
+  { fixtureId: 'R16-89', stage: 'r16', city: 'Philadelphia', localTime: '04/07 17:00 ET', kickoffUtc: '2026-07-04T21:00:00Z' },
+  { fixtureId: 'R16-90', stage: 'r16', city: 'Houston', localTime: '04/07 13:00 CT', kickoffUtc: '2026-07-04T18:00:00Z' },
+  { fixtureId: 'R16-91', stage: 'r16', city: 'New York / New Jersey', localTime: '05/07 16:00 ET', kickoffUtc: '2026-07-05T20:00:00Z' },
+  { fixtureId: 'R16-92', stage: 'r16', city: 'Cidade do México', localTime: '05/07 20:00 MX', kickoffUtc: '2026-07-06T02:00:00Z' },
+  { fixtureId: 'R16-93', stage: 'r16', city: 'Dallas', localTime: '06/07 15:00 CT', kickoffUtc: '2026-07-06T20:00:00Z' },
+  { fixtureId: 'R16-94', stage: 'r16', city: 'Seattle', localTime: '06/07 20:00 PT', kickoffUtc: '2026-07-07T03:00:00Z' },
+  { fixtureId: 'R16-95', stage: 'r16', city: 'Atlanta', localTime: '07/07 12:00 ET', kickoffUtc: '2026-07-07T16:00:00Z' },
+  { fixtureId: 'R16-96', stage: 'r16', city: 'Vancouver', localTime: '07/07 16:00 PT', kickoffUtc: '2026-07-07T23:00:00Z' },
 
   // ── Quartas — 9 a 11 jul ──
-  { fixtureId: 'QF-97', stage: 'qf', city: 'Boston', localTime: '19:00 ET', kickoffUtc: '2026-07-09T23:00:00Z' },
-  { fixtureId: 'QF-98', stage: 'qf', city: 'Los Angeles', localTime: '19:00 PT', kickoffUtc: '2026-07-11T02:00:00Z' },
-  { fixtureId: 'QF-99', stage: 'qf', city: 'Miami', localTime: '19:00 ET', kickoffUtc: '2026-07-10T23:00:00Z' },
-  { fixtureId: 'QF-100', stage: 'qf', city: 'Kansas City', localTime: '19:00 CT', kickoffUtc: '2026-07-12T00:00:00Z' },
+  { fixtureId: 'QF-97', stage: 'qf', city: 'Boston', localTime: '09/07 16:00 ET', kickoffUtc: '2026-07-09T20:00:00Z' },
+  { fixtureId: 'QF-98', stage: 'qf', city: 'Los Angeles', localTime: '10/07 15:00 PT', kickoffUtc: '2026-07-10T22:00:00Z' },
+  { fixtureId: 'QF-99', stage: 'qf', city: 'Miami', localTime: '11/07 17:00 ET', kickoffUtc: '2026-07-11T21:00:00Z' },
+  { fixtureId: 'QF-100', stage: 'qf', city: 'Kansas City', localTime: '11/07 21:00 CT', kickoffUtc: '2026-07-12T02:00:00Z' },
 
   // ── Semifinais — 14 e 15 jul ──
-  { fixtureId: 'SF-101', stage: 'sf', city: 'Dallas', localTime: '19:00 CT', kickoffUtc: '2026-07-15T00:00:00Z' },
-  { fixtureId: 'SF-102', stage: 'sf', city: 'Atlanta', localTime: '19:00 ET', kickoffUtc: '2026-07-15T23:00:00Z' },
+  { fixtureId: 'SF-101', stage: 'sf', city: 'Dallas', localTime: '14/07 15:00 CT', kickoffUtc: '2026-07-14T20:00:00Z' },
+  { fixtureId: 'SF-102', stage: 'sf', city: 'Atlanta', localTime: '15/07 15:00 ET', kickoffUtc: '2026-07-15T19:00:00Z' },
 
   // ── Disputa de 3º lugar — 18 jul ──
-  { fixtureId: 'TP-103', stage: 'tp', city: 'Miami', localTime: '19:00 ET', kickoffUtc: '2026-07-18T23:00:00Z' },
+  { fixtureId: 'TP-103', stage: 'tp', city: 'Miami', localTime: '18/07 17:00 ET', kickoffUtc: '2026-07-18T21:00:00Z' },
 
   // ── Final — 19 jul ──
-  { fixtureId: 'F-104', stage: 'final', city: 'New York / New Jersey', localTime: '19:00 ET', kickoffUtc: '2026-07-19T23:00:00Z' },
+  { fixtureId: 'F-104', stage: 'final', city: 'New York / New Jersey', localTime: '19/07 15:00 ET', kickoffUtc: '2026-07-19T19:00:00Z' },
 ];
 
 export async function seedKnockoutMatches(
