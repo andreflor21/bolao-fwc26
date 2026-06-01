@@ -1,5 +1,12 @@
 import type { BracketFixtureDto } from './bracket';
 import type { MatchDto } from './match';
+import type { ScoreRule } from './scoring';
+
+/** Pontuação de um palpite após o resultado oficial ter sido lançado. */
+export interface GuessScoreDto {
+  points: number;
+  ruleApplied: ScoreRule;
+}
 
 export interface GroupGuessInputDto {
   matchId: string;
@@ -18,6 +25,8 @@ export interface GuessDto {
   isDerived: boolean;
   submittedAt: string | null;
   updatedAt: string;
+  /** Preenchido quando o jogo já tem resultado oficial; null caso contrário. */
+  score: GuessScoreDto | null;
 }
 
 export interface GuessWithMatchDto extends GuessDto {

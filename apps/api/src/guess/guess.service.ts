@@ -16,6 +16,7 @@ import {
   type KnockoutScoreEntryDto,
   type MyGuessesDto,
   type MyKnockoutGuessesDto,
+  type ScoreRule,
 } from '@bolao/shared';
 import { buildBracket } from '../domain/bracket/bracket-engine';
 import type { FifaRanks, GroupMatchResult } from '../domain/bracket/types';
@@ -54,6 +55,7 @@ export class GuessService {
         isDerived: true,
         submittedAt: true,
         updatedAt: true,
+        score: { select: { points: true, ruleApplied: true } },
       },
     });
 
@@ -67,6 +69,9 @@ export class GuessService {
         isDerived: g.isDerived,
         submittedAt: g.submittedAt?.toISOString() ?? null,
         updatedAt: g.updatedAt.toISOString(),
+        score: g.score
+          ? { points: g.score.points, ruleApplied: g.score.ruleApplied as ScoreRule }
+          : null,
       };
       if (g.submittedAt && (!earliestSubmittedAt || g.submittedAt < earliestSubmittedAt)) {
         earliestSubmittedAt = g.submittedAt;

@@ -1,4 +1,4 @@
-import type { MatchDto } from '@bolao/shared';
+import { SCORE_RULE_LABELS, type GuessScoreDto, type MatchDto } from '@bolao/shared';
 import { flagUrl } from '../lib/flags';
 
 interface Props {
@@ -6,6 +6,8 @@ interface Props {
   guess?: { homeGoals: number; awayGoals: number };
   onChange?: (homeGoals: number, awayGoals: number) => void;
   readOnly?: boolean;
+  /** Pontuação do palpite — quando presente, o card mostra o resultado final. */
+  score?: GuessScoreDto | null;
 }
 
 function TeamFlag({ code, className = '' }: { code: string | null; className?: string }) {
@@ -42,9 +44,11 @@ function kickoffLabel(iso: string): string {
   }
 }
 
-export function MatchCard({ match, guess, onChange, readOnly }: Props) {
+export function MatchCard({ match, guess, onChange, readOnly, score }: Props) {
   const home = guess?.homeGoals ?? '';
   const away = guess?.awayGoals ?? '';
+  const hasResult =
+    match.homeGoalsOfficial !== null && match.awayGoalsOfficial !== null;
 
   function clamp(v: string): number {
     const n = Number.parseInt(v, 10);
@@ -99,6 +103,38 @@ export function MatchCard({ match, guess, onChange, readOnly }: Props) {
           </div>
         </div>
       </div>
+
+      {hasResult && (
+        <div className="mt-1 flex items-center justify-between gap-2 border-t border-emerald-500/15 pt-2">
+          <span className="text-[11px] uppercase tracking-wider text-emerald-300/60">
+            Resultado final
+          </span>
+          <div className="flex items-center gap-2">
+            <span className="font-display text-base text-white">
+              {match.homeGoalsOfficial} <span className="text-emerald-300/40">×</span>{' '}
+              {match.awayGoalsOfficial}
+            </span>
+            {score && (
+              <span
+                className={
+                  'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-bold ' +
+                  (score.points > 0
+                    ? 'bg-gold-400/15 text-gold-200 border border-gold-400/30'
+                    : 'bg-midnight-800 text-emerald-200/60 border border-emerald-500/20')
+                }
+                title={SCORE_RULE_LABELS[score.ruleApplied]}
+              >
+                +{score.points} pts
+              </span>
+            )}
+          </div>
+        </div>
+      )}
+      {hasResult && score && (
+        <p className="text-[10px] text-emerald-300/50 text-right -mt-1">
+          {SCORE_RULE_LABELS[score.ruleApplied]}
+        </p>
+      )}
     </div>
   );
 }

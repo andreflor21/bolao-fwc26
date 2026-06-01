@@ -341,6 +341,53 @@ nas resoluções: 360×800 (Android low-end), 390×844 (iPhone 14), 768×1024
 
 ---
 
+## Chunk 5 — Próximas features (backlog, pedido em 2026-05-31)
+
+### Task 59 — Ver palpites de outros jogadores
+**Objetivo.** Depois que os palpites travam (lock da Copa / `submittedAt`),
+permitir que um jogador veja os palpites de outros participantes — começando
+pelos membros dos seus bolões paralelos e/ou pelo ranking geral.
+
+**Considerações.**
+- **Privacidade/integridade:** NUNCA expor palpites enquanto a janela está
+  aberta (`isOpen`/antes do lock) — só liberar leitura após o lock para não
+  permitir cópia. Gatear no backend, não só na UI.
+- Backend: novo endpoint `GET /guesses/by-user/:userId` (ou
+  `/side-pools/:id/guesses`) que valida (a) competição travada e (b) que o
+  solicitante tem direito de ver (mesmo bolão / ranking público). Reusar o
+  shape de `MyGuessesDto` mas read-only e sem score sensível além do já
+  público.
+- Frontend: na linha do ranking / lista de membros do bolão, botão "ver
+  palpites"; reaproveitar `MatchCard` em modo `readOnly` mostrando o placar
+  do outro + resultado oficial + pontos (já temos `score` no DTO agora).
+
+### Task 60 — IA no WhatsApp com estatísticas do grupo
+**Objetivo.** Bot/IA conectada a um grupo de WhatsApp que envia, sob demanda
+ou agendado, estatísticas agregadas dos palpites dos participantes:
+- Top 3 placares mais palpitados (por jogo ou da rodada)
+- % de palpites em vitória do time A
+- % de palpites em vitória do time B
+- % de palpites em empate
+
+**Considerações.**
+- **Agregação backend:** endpoint `GET /matches/:id/stats` (ou
+  `/rounds/:n/stats`) que calcula, sobre os palpites SUBMETIDOS, a
+  distribuição de placares (top 3) e os percentuais A/empate/B. Cachear em
+  Redis (TTL curto) — pode ser pesado com N grande.
+- **Privacidade:** só números agregados, nunca palpite individual atrelado a
+  nome antes do lock. Idealmente só liberar stats após o lock também.
+- **Canal WhatsApp:** decidir provedor — WhatsApp Cloud API (Meta) oficial vs.
+  biblioteca não-oficial (`whatsapp-web.js`, risco de ban). Para grupo, a
+  Cloud API tem limitações de envio a grupos; avaliar enviar via número
+  comercial ou template. Documentar trade-offs antes de implementar.
+- **IA:** usar o mesmo cliente Anthropic já configurado (`ANTHROPIC_API_KEY`)
+  pra formatar a mensagem em linguagem natural a partir do JSON de stats.
+- **Memória do projeto:** já temos infra de e-mail (SendPulse) e push; o
+  WhatsApp seria um 3º canal — provavelmente um novo `notification` driver +
+  cron/endpoint de disparo.
+
+---
+
 ## Ordem sugerida para amanhã
 
 1. **Commit** das mudanças pendentes do Closure Flow + tie-break refactor + Stripe

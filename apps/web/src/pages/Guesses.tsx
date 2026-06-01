@@ -219,6 +219,7 @@ export function Guesses() {
                   key={m.id}
                   match={m}
                   guess={draft[m.id]}
+                  score={guessesQuery.data?.guesses[m.id]?.score}
                   readOnly={isLocked || alreadySubmitted}
                   onChange={(home, away) => updateGuess(m.id, home, away)}
                 />
