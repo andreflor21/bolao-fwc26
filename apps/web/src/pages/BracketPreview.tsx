@@ -4,7 +4,12 @@ import { api, ApiError } from '../lib/api';
 import { BracketSlot } from '../components/BracketSlot';
 import { ManualTiebreakResolver } from '../components/ManualTiebreakResolver';
 import { flagUrl } from '../lib/flags';
-import type { BracketPreviewDto, GroupLetter, KnockoutStage } from '@bolao/shared';
+import type {
+  BracketPreviewDto,
+  GroupLetter,
+  KnockoutStage,
+  MyKnockoutGuessesDto,
+} from '@bolao/shared';
 
 const STAGE_LABEL: Record<KnockoutStage, string> = {
   r32: 'Rodada de 32',
@@ -22,6 +27,12 @@ export function BracketPreview() {
   const bracketQuery = useQuery({
     queryKey: ['bracket-preview'],
     queryFn: () => api<BracketPreviewDto>('/guesses/bracket-preview'),
+  });
+
+  // Palpites de placar de KO do jogador, pra mostrar "palpite × real" no bracket.
+  const koQuery = useQuery({
+    queryKey: ['knockout-guesses'],
+    queryFn: () => api<MyKnockoutGuessesDto>('/guesses/knockout'),
   });
 
   const tiebreakMutation = useMutation({
@@ -58,6 +69,17 @@ export function BracketPreview() {
   const bracket = bracketQuery.data!;
   const champion = bracket.fixtures.find((f) => f.id === 'F-104')?.predictedWinnerCode;
   const thirdPlace = bracket.fixtures.find((f) => f.id === 'TP-103')?.predictedWinnerCode;
+  const koScores = koQuery.data?.scores ?? {};
+  const officialResults = bracket.official?.results ?? {};
+  // Quando há resultados oficiais, mostra as classificações REAIS dos grupos
+  // (e os 8 melhores 3º reais) em vez das previstas pelos palpites.
+  const hasOfficialGroups =
+    bracket.official && Object.keys(bracket.official.groups).length > 0;
+  const displayGroups = hasOfficialGroups ? bracket.official!.groups : bracket.groups;
+  const displayThirds =
+    hasOfficialGroups && bracket.official!.bestThirds.length > 0
+      ? bracket.official!.bestThirds
+      : bracket.bestThirds;
 
   return (
     <div className="space-y-8">
@@ -103,9 +125,14 @@ export function BracketPreview() {
       <section className="card">
         <h2 className="font-display text-xl tracking-wider text-emerald-100/80 mb-4">
           Classificações dos grupos
+          {hasOfficialGroups && (
+            <span className="ml-2 text-xs font-normal text-gold-300/80 tracking-normal">
+              · resultado oficial
+            </span>
+          )}
         </h2>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {Object.entries(bracket.groups).map(([letter, standings]) => (
+          {Object.entries(displayGroups).map(([letter, standings]) => (
             <div key={letter} className="rounded-xl border border-emerald-500/15 bg-midnight-900/60 p-3">
               <p className="text-[10px] tracking-[0.3em] text-gold-300/80 mb-2">GRUPO {letter}</p>
               <table className="w-full text-xs">
@@ -157,13 +184,18 @@ export function BracketPreview() {
         </div>
       </section>
 
-      {bracket.bestThirds.length > 0 && (
+      {displayThirds.length > 0 && (
         <section className="card">
           <h2 className="font-display text-xl tracking-wider text-emerald-100/80 mb-3">
             8 Melhores 3º colocados
+            {hasOfficialGroups && bracket.official!.bestThirds.length > 0 && (
+              <span className="ml-2 text-xs font-normal text-gold-300/80 tracking-normal">
+                · resultado oficial
+              </span>
+            )}
           </h2>
           <div className="flex flex-wrap gap-2">
-            {bracket.bestThirds.map((t) => {
+            {displayThirds.map((t) => {
               const url = flagUrl(t.teamCode);
               return (
                 <span key={t.teamCode} className="chip gap-2">
@@ -199,7 +231,12 @@ export function BracketPreview() {
                   </p>
                   <div className="flex flex-col gap-2 justify-around min-h-full">
                     {fixtures.map((f) => (
-                      <BracketSlot key={f.id} fixture={f} />
+                      <BracketSlot
+                        key={f.id}
+                        fixture={f}
+                        guess={koScores[f.id]}
+                        official={officialResults[f.id]}
+                      />
                     ))}
                   </div>
                 </div>

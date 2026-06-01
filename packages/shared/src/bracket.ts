@@ -49,6 +49,30 @@ export interface UnresolvedTieDto {
   positions: number[];
 }
 
+/** Resultado oficial de um confronto do mata-mata (times reais + placar). */
+export interface OfficialFixtureResultDto {
+  fixtureId: string;
+  homeTeamCode: string | null;
+  awayTeamCode: string | null;
+  homeGoals: number;
+  awayGoals: number;
+  advancesTeamCode: string | null;
+}
+
+/**
+ * Estado OFICIAL da competição (classificações reais dos grupos + melhores 3º
+ * reais + resultados reais do mata-mata), independente do palpite do jogador.
+ * Só preenchido conforme os resultados oficiais vão sendo lançados.
+ */
+export interface OfficialBracketDto {
+  /** Classificações reais por grupo (vazio até haver resultados). */
+  groups: Record<GroupLetter, GroupStandingDto[]>;
+  /** 8 melhores 3º reais (vazio até a fase de grupos terminar). */
+  bestThirds: Array<GroupStandingDto & { bestThirdRank: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 }>;
+  /** Resultados oficiais do mata-mata, keyed by fixtureId. */
+  results: Record<string, OfficialFixtureResultDto>;
+}
+
 export interface BracketPreviewDto {
   /** Standings of all 12 groups, each ordered 1st to 4th. */
   groups: Record<GroupLetter, GroupStandingDto[]>;
@@ -62,4 +86,6 @@ export interface BracketPreviewDto {
    * explicit order; FIFA rank is the fallback used until they do.
    */
   unresolvedTies: UnresolvedTieDto[];
+  /** Estado oficial real da competição (classificações + KO), quando houver. */
+  official?: OfficialBracketDto;
 }

@@ -80,6 +80,9 @@ export interface KnockoutFixtureScoreDto {
 
 /** Resultado oficial de um confronto de mata-mata. */
 export interface KnockoutOfficialResultDto {
+  /** Times REAIS que jogaram (podem diferir do palpite do jogador). */
+  homeTeamCode: string | null;
+  awayTeamCode: string | null;
   homeGoals: number;
   awayGoals: number;
   advancesTeamCode: string | null;

@@ -105,14 +105,20 @@ export function MatchCard({ match, guess, onChange, readOnly, score }: Props) {
       </div>
 
       {hasResult && (
-        <div className="mt-1 flex items-center justify-between gap-2 border-t border-emerald-500/15 pt-2">
+        <div className="mt-1 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-t border-emerald-500/15 pt-2">
           <span className="text-[11px] uppercase tracking-wider text-emerald-300/60">
             Resultado final
           </span>
-          <div className="flex items-center gap-2">
-            <span className="font-display text-base text-white">
-              {match.homeGoalsOfficial} <span className="text-emerald-300/40">×</span>{' '}
-              {match.awayGoalsOfficial}
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="flex items-center gap-1.5 text-sm text-white">
+              <TeamFlag code={match.homeTeamCode} className="w-5 h-3.5" />
+              <span className="font-semibold">{match.homeTeamCode}</span>
+              <span className="font-display">
+                {match.homeGoalsOfficial} <span className="text-emerald-300/40">×</span>{' '}
+                {match.awayGoalsOfficial}
+              </span>
+              <span className="font-semibold">{match.awayTeamCode}</span>
+              <TeamFlag code={match.awayTeamCode} className="w-5 h-3.5" />
             </span>
             {score && (
               <span

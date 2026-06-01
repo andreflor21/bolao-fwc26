@@ -497,14 +497,21 @@ function KnockoutFixtureCard({
       )}
 
       {official && (
-        <div className="mt-1 flex items-center justify-between gap-2 border-t border-emerald-500/15 pt-2">
+        <div className="mt-1 border-t border-emerald-500/15 pt-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
           <span className="text-[11px] uppercase tracking-wider text-emerald-300/60">
             Resultado final
           </span>
-          <div className="flex items-center gap-2">
-            <span className="font-display text-base text-white">
-              {official.homeGoals} <span className="text-emerald-300/40">×</span>{' '}
-              {official.awayGoals}
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* Times REAIS que jogaram (podem diferir do palpite). */}
+            <span className="flex items-center gap-1.5 text-sm text-white">
+              <MiniFlag code={official.homeTeamCode} />
+              <span className="font-semibold">{official.homeTeamCode ?? '—'}</span>
+              <span className="font-display">
+                {official.homeGoals} <span className="text-emerald-300/40">×</span>{' '}
+                {official.awayGoals}
+              </span>
+              <span className="font-semibold">{official.awayTeamCode ?? '—'}</span>
+              <MiniFlag code={official.awayTeamCode} />
             </span>
             {official.advancesTeamCode && (
               <span className="text-[10px] text-emerald-300/60">
@@ -528,6 +535,19 @@ function KnockoutFixtureCard({
         </div>
       )}
     </div>
+  );
+}
+
+function MiniFlag({ code }: { code: string | null }) {
+  const url = flagUrl(code);
+  if (!url) return null;
+  return (
+    <img
+      src={url}
+      alt=""
+      loading="lazy"
+      className="w-5 h-3.5 object-cover rounded-[2px] ring-1 ring-black/20 shrink-0"
+    />
   );
 }
 
