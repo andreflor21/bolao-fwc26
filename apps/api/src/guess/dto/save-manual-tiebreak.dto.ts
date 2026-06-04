@@ -4,7 +4,6 @@ import {
   ArrayUnique,
   IsArray,
   IsIn,
-  IsObject,
   IsString,
   MaxLength,
   ValidateNested,
@@ -33,7 +32,6 @@ export class GroupTiebreakOrderInput {
 }
 
 export class SaveManualTiebreakBody {
-  @IsObject()
   @ValidateNested({ each: true })
   @Type(() => GroupTiebreakOrderInput)
   @IsArray()
