@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { api, ApiError } from '../../lib/api';
+import { AdminPageHeader } from '../../components/admin/AdminPageHeader';
 
 export function AdminReconciliation() {
   const [result, setResult] = useState<string | null>(null);
@@ -21,16 +22,10 @@ export function AdminReconciliation() {
 
   return (
     <div className="space-y-6">
-      <header>
-        <p className="text-xs font-bold tracking-[0.4em] text-gold-400">OPERAÇÃO</p>
-        <h1 className="font-display text-3xl tracking-wider text-white mt-1">
-          <span className="text-shimmer">RECONCILIAÇÃO</span>
-        </h1>
-        <p className="text-sm text-emerald-200/70 mt-2 max-w-xl">
-          Use estas ferramentas quando o estado do Redis sair de sincronia com o Postgres
-          (ex: pós-importação, troca de instância Redis, ou bug de cache).
-        </p>
-      </header>
+      <AdminPageHeader
+        title="RECONCILIAÇÃO"
+        subtitle="Use estas ferramentas quando o estado do Redis sair de sincronia com o Postgres (ex: pós-importação, troca de instância Redis, ou bug de cache)."
+      />
 
       <section className="card-glow space-y-3">
         <h2 className="font-display text-xl tracking-wider text-emerald-100/80">

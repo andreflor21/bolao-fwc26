@@ -157,6 +157,29 @@ class EnvVars {
   @IsOptional()
   @IsString()
   ANTHROPIC_MODEL?: string;
+
+  // WhatsApp broadcast (Evolution API self-host por padrão). Se WHATSAPP_PROVIDER
+  // estiver vazio ou ='mock', o WhatsappService loga no console em vez de enviar.
+  @IsOptional()
+  @IsString()
+  WHATSAPP_PROVIDER?: string;
+
+  @IsOptional()
+  @IsString()
+  EVOLUTION_API_URL?: string;
+
+  @IsOptional()
+  @IsString()
+  EVOLUTION_API_KEY?: string;
+
+  @IsOptional()
+  @IsString()
+  EVOLUTION_INSTANCE?: string;
+
+  /** JID do grupo de destino (ex.: "120363xxx@g.us"). */
+  @IsOptional()
+  @IsString()
+  WHATSAPP_GROUP_JID?: string;
 }
 
 export function validateEnv(config: Record<string, unknown>): EnvVars {

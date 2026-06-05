@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError } from '../../lib/api';
+import { AdminPageHeader } from '../../components/admin/AdminPageHeader';
 
 interface PendingPixItem {
   subscriptionId: string;
@@ -70,16 +71,10 @@ export function AdminPixApprovals() {
 
   return (
     <div className="space-y-6">
-      <header>
-        <p className="text-xs font-bold tracking-[0.4em] text-gold-400">PIX</p>
-        <h1 className="font-display text-3xl tracking-wider text-white mt-1">
-          <span className="text-shimmer">APROVAÇÃO MANUAL</span>
-        </h1>
-        <p className="text-sm text-emerald-200/70 mt-2 max-w-2xl">
-          Inscrições pagas via Pix que não foram confirmadas automaticamente. Veja o comprovante
-          enviado e ative a inscrição manualmente após conferir o pagamento na sua conta.
-        </p>
-      </header>
+      <AdminPageHeader
+        title="APROVAÇÃO MANUAL"
+        subtitle="Inscrições pagas via Pix que não foram confirmadas automaticamente. Veja o comprovante enviado e ative a inscrição manualmente após conferir o pagamento na sua conta."
+      />
 
       {error && (
         <p className="text-sm text-red-200 bg-red-500/10 border border-red-400/30 rounded-xl p-3">
