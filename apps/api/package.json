@@ -11,6 +11,10 @@
     "test": "jest",
     "test:watch": "jest --watch",
     "test:e2e": "playwright test",
+    "bracket:print": "ts-node --transpile-only prisma/regen-knockout.ts",
+    "bracket:regen": "ts-node --transpile-only prisma/regen-knockout.ts --apply",
+    "bracket:reset-list": "ts-node --transpile-only prisma/reset-knockout-brackets.ts",
+    "bracket:reset": "ts-node --transpile-only prisma/reset-knockout-brackets.ts --apply",
     "prisma": "prisma"
   },
   "prisma": {
