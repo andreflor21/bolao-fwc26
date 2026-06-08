@@ -6,6 +6,8 @@ import type {
   ClosurePrecheckDto,
   ClosureSnapshotDto,
 } from '@bolao/shared';
+import { AdminPageHeader } from '../../components/admin/AdminPageHeader';
+import { AdminModal } from '../../components/admin/AdminModal';
 
 function brl(cents: number): string {
   return (cents / 100).toLocaleString('pt-BR', {
@@ -63,16 +65,15 @@ export function AdminClosure() {
 
   return (
     <div className="space-y-6">
-      <header>
-        <p className="text-xs font-bold tracking-[0.4em] text-gold-400">FIM-DE-JOGO</p>
-        <h1 className="font-display text-3xl tracking-wider text-white mt-1">
-          <span className="text-shimmer">ENCERRAMENTO</span>
-        </h1>
-        <p className="text-sm text-emerald-200/70 mt-2 max-w-2xl">
-          Encerrar a competição congela o ranking, gera a tabela de payouts e marca a
-          competição como <code>finalized</code>. Esta ação é <strong>irreversível</strong>.
-        </p>
-      </header>
+      <AdminPageHeader
+        title="ENCERRAMENTO"
+        subtitle={
+          <>
+            Encerrar a competição congela o ranking, gera a tabela de payouts e marca a
+            competição como <code>finalized</code>. Esta ação é <strong>irreversível</strong>.
+          </>
+        }
+      />
 
       {alreadyFinalized && (
         <div className="card-glow border-gold-400/40 bg-gold-400/5">
@@ -147,56 +148,52 @@ export function AdminClosure() {
         </button>
       </div>
 
-      {showConfirm && (
-        <div
-          className="fixed inset-0 z-40 grid place-items-center bg-black/70 p-4"
-          onClick={() => setShowConfirm(false)}
-        >
-          <div
-            className="card-glow max-w-md w-full"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h3 className="font-display text-2xl text-white tracking-wider mb-3">
-              CONFIRMAR ENCERRAMENTO
-            </h3>
-            <p className="text-sm text-emerald-100/85 mb-3">
-              Esta ação é <strong>IRREVERSÍVEL</strong>. Após encerrar:
-            </p>
-            <ul className="text-sm text-emerald-100/80 list-disc list-inside space-y-1 mb-4">
-              <li>O ranking é congelado e os prêmios são distribuídos</li>
-              <li>Palpites e resultados oficiais não podem mais ser editados</li>
-              <li>A página /admin/prizes habilita o botão "marcar como pago"</li>
-            </ul>
-            <label className="flex items-start gap-2 text-xs text-emerald-100/80 mb-4 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={acknowledged}
-                onChange={(e) => setAcknowledged(e.target.checked)}
-                className="mt-0.5"
-              />
-              <span>Eu entendo que essa ação é irreversível.</span>
-            </label>
-            <div className="flex justify-end gap-2">
-              <button
-                className="btn-secondary text-sm"
-                onClick={() => {
-                  setShowConfirm(false);
-                  setAcknowledged(false);
-                }}
-              >
-                Cancelar
-              </button>
-              <button
-                className="btn-gold text-sm"
-                disabled={!acknowledged || finalizeMutation.isPending}
-                onClick={() => finalizeMutation.mutate()}
-              >
-                {finalizeMutation.isPending ? 'Encerrando...' : 'Confirmar encerramento'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <AdminModal
+        open={showConfirm}
+        onClose={() => {
+          setShowConfirm(false);
+          setAcknowledged(false);
+        }}
+        title={<span className="font-display text-2xl text-white tracking-wider">CONFIRMAR ENCERRAMENTO</span>}
+        footer={
+          <>
+            <button
+              className="btn-secondary text-sm"
+              onClick={() => {
+                setShowConfirm(false);
+                setAcknowledged(false);
+              }}
+            >
+              Cancelar
+            </button>
+            <button
+              className="btn-gold text-sm"
+              disabled={!acknowledged || finalizeMutation.isPending}
+              onClick={() => finalizeMutation.mutate()}
+            >
+              {finalizeMutation.isPending ? 'Encerrando...' : 'Confirmar encerramento'}
+            </button>
+          </>
+        }
+      >
+        <p className="text-sm text-emerald-100/85">
+          Esta ação é <strong>IRREVERSÍVEL</strong>. Após encerrar:
+        </p>
+        <ul className="text-sm text-emerald-100/80 list-disc list-inside space-y-1">
+          <li>O ranking é congelado e os prêmios são distribuídos</li>
+          <li>Palpites e resultados oficiais não podem mais ser editados</li>
+          <li>A página /admin/prizes habilita o botão "marcar como pago"</li>
+        </ul>
+        <label className="flex items-start gap-2 text-xs text-emerald-100/80 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={acknowledged}
+            onChange={(e) => setAcknowledged(e.target.checked)}
+            className="mt-0.5"
+          />
+          <span>Eu entendo que essa ação é irreversível.</span>
+        </label>
+      </AdminModal>
     </div>
   );
 }

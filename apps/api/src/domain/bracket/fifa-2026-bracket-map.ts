@@ -8,10 +8,11 @@ import type { GroupLetter } from '@bolao/shared';
  * lookup logic assigns each of the 8 advancing thirds to exactly one slot
  * such that no slot is empty and no two thirds collide.
  *
- * R16 → Final + 3rd-place follows the classic symmetric cross-bracket:
- *   R16-{89..96} = W(R32-{73..88}) paired sequentially
- *   QF-{97..100} = W(R16-{89..96}) paired sequentially
- *   SF-{101..102} = W(QF-{97..100}) paired sequentially
+ * R16 → Final + 3rd-place follow the OFFICIAL FIFA 2026 bracket cross-pairings
+ * (NOT a naive sequential pairing — FIFA crosses the halves specifically):
+ *   R16-{89..96} = specific W(R32-*) pairs (see R16_FIXTURES)
+ *   QF-{97..100} = specific W(R16-*) pairs (see QF_FIXTURES)
+ *   SF-101 = W(QF-97) × W(QF-98) ; SF-102 = W(QF-99) × W(QF-100)
  *   F-104 = W(SF-101) × W(SF-102)
  *   TP-103 (3rd place) = L(SF-101) × L(SF-102)
  *
@@ -60,22 +61,23 @@ export const R32_FIXTURES: FixtureTemplate[] = [
   { id: 'R32-88', stage: 'r32', topSlot: r('D'), bottomSlot: r('G') },
 ];
 
-// R16 — classic symmetric cross-bracket: pairs R32 winners 73↔74, 75↔76, etc.
+// R16 — OFFICIAL FIFA 2026 cross-pairings (not sequential).
 export const R16_FIXTURES: FixtureTemplate[] = [
-  { id: 'R16-89', stage: 'r16', topSlot: wo('R32-73'), bottomSlot: wo('R32-74') },
-  { id: 'R16-90', stage: 'r16', topSlot: wo('R32-75'), bottomSlot: wo('R32-76') },
-  { id: 'R16-91', stage: 'r16', topSlot: wo('R32-77'), bottomSlot: wo('R32-78') },
+  { id: 'R16-89', stage: 'r16', topSlot: wo('R32-74'), bottomSlot: wo('R32-77') },
+  { id: 'R16-90', stage: 'r16', topSlot: wo('R32-73'), bottomSlot: wo('R32-75') },
+  { id: 'R16-91', stage: 'r16', topSlot: wo('R32-76'), bottomSlot: wo('R32-78') },
   { id: 'R16-92', stage: 'r16', topSlot: wo('R32-79'), bottomSlot: wo('R32-80') },
-  { id: 'R16-93', stage: 'r16', topSlot: wo('R32-81'), bottomSlot: wo('R32-82') },
-  { id: 'R16-94', stage: 'r16', topSlot: wo('R32-83'), bottomSlot: wo('R32-84') },
-  { id: 'R16-95', stage: 'r16', topSlot: wo('R32-85'), bottomSlot: wo('R32-86') },
-  { id: 'R16-96', stage: 'r16', topSlot: wo('R32-87'), bottomSlot: wo('R32-88') },
+  { id: 'R16-93', stage: 'r16', topSlot: wo('R32-83'), bottomSlot: wo('R32-84') },
+  { id: 'R16-94', stage: 'r16', topSlot: wo('R32-81'), bottomSlot: wo('R32-82') },
+  { id: 'R16-95', stage: 'r16', topSlot: wo('R32-86'), bottomSlot: wo('R32-88') },
+  { id: 'R16-96', stage: 'r16', topSlot: wo('R32-85'), bottomSlot: wo('R32-87') },
 ];
 
+// QF — OFFICIAL FIFA 2026 cross-pairings (J98/J99 cross the bracket halves).
 export const QF_FIXTURES: FixtureTemplate[] = [
   { id: 'QF-97', stage: 'qf', topSlot: wo('R16-89'), bottomSlot: wo('R16-90') },
-  { id: 'QF-98', stage: 'qf', topSlot: wo('R16-91'), bottomSlot: wo('R16-92') },
-  { id: 'QF-99', stage: 'qf', topSlot: wo('R16-93'), bottomSlot: wo('R16-94') },
+  { id: 'QF-98', stage: 'qf', topSlot: wo('R16-93'), bottomSlot: wo('R16-94') },
+  { id: 'QF-99', stage: 'qf', topSlot: wo('R16-91'), bottomSlot: wo('R16-92') },
   { id: 'QF-100', stage: 'qf', topSlot: wo('R16-95'), bottomSlot: wo('R16-96') },
 ];
 

@@ -10,6 +10,7 @@ const NAV_LINKS = [
   { to: '/bracket', label: 'Chaveamento' },
   { to: '/knockout-guesses', label: 'Mata-mata' },
   { to: '/ranking', label: 'Ranking' },
+  { to: '/participantes', label: 'Participantes' },
   { to: '/prizes', label: 'Prêmios' },
   { to: '/side-pools', label: 'Meus bolões' },
 ];

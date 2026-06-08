@@ -16,6 +16,8 @@ import { PaymentSuccess } from './pages/PaymentSuccess';
 import { PaymentCancel } from './pages/PaymentCancel';
 import { PaymentPix } from './pages/PaymentPix';
 import { Ranking } from './pages/Ranking';
+import { Participants } from './pages/Participants';
+import { ParticipantProfile } from './pages/ParticipantProfile';
 import { Prizes } from './pages/Prizes';
 import { Privacy } from './pages/Privacy';
 import { Terms } from './pages/Terms';
@@ -26,6 +28,7 @@ import { AdminClosure } from './pages/admin/AdminClosure';
 import { AdminReconciliation } from './pages/admin/AdminReconciliation';
 import { AdminPixApprovals } from './pages/admin/AdminPixApprovals';
 import { AdminKnockout } from './pages/admin/AdminKnockout';
+import { AdminBroadcast } from './pages/admin/AdminBroadcast';
 import { useAuth } from './lib/auth';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -143,6 +146,22 @@ export function App() {
           }
         />
         <Route
+          path="/participantes"
+          element={
+            <ProtectedRoute>
+              <Participants />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/participantes/:userId"
+          element={
+            <ProtectedRoute>
+              <ParticipantProfile />
+            </ProtectedRoute>
+          }
+        />
+        <Route
           path="/prizes"
           element={
             <ProtectedRoute>
@@ -154,6 +173,7 @@ export function App() {
           <Route index element={<Navigate to="matches" replace />} />
           <Route path="matches" element={<AdminMatches />} />
           <Route path="knockout" element={<AdminKnockout />} />
+          <Route path="broadcast" element={<AdminBroadcast />} />
           <Route path="prizes" element={<AdminPrizes />} />
           <Route path="closure" element={<AdminClosure />} />
           <Route path="pix" element={<AdminPixApprovals />} />

@@ -3,6 +3,8 @@ import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, apiDownload, ApiError } from '../../lib/api';
 import type { AdminPrizePayoutDto, ClosureSnapshotDto } from '@bolao/shared';
+import { AdminPageHeader } from '../../components/admin/AdminPageHeader';
+import { AdminModal } from '../../components/admin/AdminModal';
 
 function brl(cents: number): string {
   return (cents / 100).toLocaleString('pt-BR', {
@@ -103,26 +105,25 @@ export function AdminPrizes() {
 
   return (
     <div className="space-y-6">
-      <header className="flex items-end justify-between flex-wrap gap-3">
-        <div>
-          <p className="text-xs font-bold tracking-[0.4em] text-gold-400">PREMIAÇÃO</p>
-          <h1 className="font-display text-3xl tracking-wider text-white mt-1">
-            <span className="text-shimmer">PAYOUTS</span>
-          </h1>
-          <p className="text-sm text-emerald-200/70 mt-2 max-w-xl">
+      <AdminPageHeader
+        title="PAYOUTS"
+        subtitle={
+          <>
             {snap.payouts.length} prêmios congelados em{' '}
             {snap.finalizedAt ? formatDateTime(snap.finalizedAt) : '—'}. Marque cada
             pagamento conforme você processa o Pix.
-          </p>
-        </div>
-        <button
-          className="btn-secondary text-sm"
-          onClick={downloadCsv}
-          disabled={csvLoading}
-        >
-          {csvLoading ? 'Baixando...' : '⬇ Baixar CSV'}
-        </button>
-      </header>
+          </>
+        }
+        actions={
+          <button
+            className="btn-secondary text-sm"
+            onClick={downloadCsv}
+            disabled={csvLoading}
+          >
+            {csvLoading ? 'Baixando...' : '⬇ Baixar CSV'}
+          </button>
+        }
+      />
 
       {csvError && (
         <p className="text-sm text-red-200 bg-red-500/10 border border-red-400/30 rounded-xl p-3">
@@ -162,48 +163,20 @@ export function AdminPrizes() {
         </table>
       </div>
 
-      {markingPayout && (
-        <div
-          className="fixed inset-0 z-40 grid place-items-center bg-black/70 p-4"
-          onClick={() => setMarkingPayout(null)}
-        >
-          <div
-            className="card-glow max-w-md w-full"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h3 className="font-display text-2xl text-white tracking-wider mb-3">
-              {markingPayout.paidAt ? 'ATUALIZAR PAGAMENTO' : 'MARCAR COMO PAGO'}
-            </h3>
-            <p className="text-sm text-emerald-100/80 mb-3">
-              <strong>{markingPayout.user?.name ?? '—'}</strong> · {markingPayout.categoryLabel}
-              <br />
-              <span className="text-gold-300">{brl(markingPayout.amountCents)}</span>
-              {markingPayout.user?.pixKey && (
-                <>
-                  <br />
-                  <span className="text-xs text-emerald-200/70">
-                    Pix: <code>{markingPayout.user.pixKey}</code>
-                  </span>
-                </>
-              )}
-            </p>
-            <label className="block text-xs text-emerald-200/70 mb-1">
-              Referência (txid Pix, opcional)
-            </label>
-            <input
-              type="text"
-              className="input w-full mb-3"
-              placeholder="Ex: E00000000202608180000000000000"
-              value={reference}
-              onChange={(e) => setReference(e.target.value)}
-              maxLength={120}
-            />
-            {markPaidMutation.error && (
-              <p className="text-sm text-red-200 mb-3">
-                {(markPaidMutation.error as Error).message}
-              </p>
-            )}
-            <div className="flex justify-end gap-2">
+      <AdminModal
+        open={Boolean(markingPayout)}
+        onClose={() => {
+          setMarkingPayout(null);
+          setReference('');
+        }}
+        title={
+          <span className="font-display text-2xl text-white tracking-wider">
+            {markingPayout?.paidAt ? 'ATUALIZAR PAGAMENTO' : 'MARCAR COMO PAGO'}
+          </span>
+        }
+        footer={
+          markingPayout && (
+            <>
               <button
                 className="btn-secondary text-sm"
                 onClick={() => {
@@ -229,10 +202,44 @@ export function AdminPrizes() {
                   ? 'Atualizar referência'
                   : 'Confirmar pagamento'}
               </button>
-            </div>
-          </div>
-        </div>
-      )}
+            </>
+          )
+        }
+      >
+        {markingPayout && (
+          <>
+            <p className="text-sm text-emerald-100/80">
+              <strong>{markingPayout.user?.name ?? '—'}</strong> · {markingPayout.categoryLabel}
+              <br />
+              <span className="text-gold-300">{brl(markingPayout.amountCents)}</span>
+              {markingPayout.user?.pixKey && (
+                <>
+                  <br />
+                  <span className="text-xs text-emerald-200/70 break-all">
+                    Pix: <code>{markingPayout.user.pixKey}</code>
+                  </span>
+                </>
+              )}
+            </p>
+            <label className="block text-xs text-emerald-200/70 mb-1">
+              Referência (txid Pix, opcional)
+            </label>
+            <input
+              type="text"
+              className="input w-full"
+              placeholder="Ex: E00000000202608180000000000000"
+              value={reference}
+              onChange={(e) => setReference(e.target.value)}
+              maxLength={120}
+            />
+            {markPaidMutation.error && (
+              <p className="text-sm text-red-200">
+                {(markPaidMutation.error as Error).message}
+              </p>
+            )}
+          </>
+        )}
+      </AdminModal>
     </div>
   );
 }

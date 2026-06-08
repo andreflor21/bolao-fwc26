@@ -20,6 +20,8 @@ import { RedisModule } from './redis/redis.module';
 import { RankingModule } from './ranking/ranking.module';
 import { PrizeModule } from './prize/prize.module';
 import { NotificationModule } from './notification/notification.module';
+import { BroadcastModule } from './broadcast/broadcast.module';
+import { ProfileModule } from './profile/profile.module';
 import { HealthController } from './health/health.controller';
 import { validateEnv } from './config/env.validation';
 
@@ -70,6 +72,8 @@ import { validateEnv } from './config/env.validation';
     PrizeModule,
     NotificationModule,
     AdminModule,
+    BroadcastModule,
+    ProfileModule,
   ],
   controllers: [HealthController],
   providers: [

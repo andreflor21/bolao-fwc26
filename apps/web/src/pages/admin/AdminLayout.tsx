@@ -17,7 +17,7 @@ export function AdminRoute() {
 
 function AdminLayout() {
   return (
-    <div className="grid lg:grid-cols-[220px,1fr] gap-6">
+    <div className="grid gap-4 lg:grid-cols-[220px,1fr] lg:gap-6">
       <aside className="lg:sticky lg:top-24 lg:self-start">
         <div className="card-glow !p-2 lg:!p-4 flex flex-row gap-1 overflow-x-auto lg:flex-col lg:space-y-1 border-gold-400/30 bg-gradient-to-br from-midnight-800/90 to-midnight-900/90">
           <p className="hidden lg:block text-[10px] tracking-[0.3em] text-gold-300/80 mb-2 px-2">
@@ -25,6 +25,7 @@ function AdminLayout() {
           </p>
           <SidebarLink to="/admin/matches" label="Resultados" icon="📊" />
           <SidebarLink to="/admin/knockout" label="Mata-mata" icon="🏟️" />
+          <SidebarLink to="/admin/broadcast" label="Broadcast" icon="📣" />
           <SidebarLink to="/admin/prizes" label="Premiação" icon="🏆" />
           <SidebarLink to="/admin/closure" label="Encerramento" icon="🔒" />
           <SidebarLink to="/admin/pix" label="Pix" icon="💸" />

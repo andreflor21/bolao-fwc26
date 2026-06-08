@@ -80,6 +80,8 @@ model User {
   prizePayouts      PrizePayout[]
   pushSubscriptions PushSubscription[]
   knockoutScores    KnockoutGuessScore[]
+  broadcastsSent     BroadcastLog[] @relation("BroadcastSent")
+  broadcastsReceived BroadcastLog[] @relation("BroadcastTarget")
 
   @@index([createdAt])
   @@map("users")
@@ -354,6 +356,34 @@ model PushSubscription {
   @@unique([userId, endpoint])
   @@index([userId])
   @@map("push_subscriptions")
+}
+
+/**
+ * Auditoria de mensagens disparadas pelo admin para o grupo do WhatsApp.
+ * Guarda o texto efetivamente enviado (que pode ter sido editado pelo admin
+ * depois da geração por IA), o preset de origem e o resultado do provider.
+ */
+model BroadcastLog {
+  id           String   @id @default(uuid()) @db.Uuid
+  presetKey    String?  @map("preset_key")
+  text         String
+  /** 'sent' | 'failed' */
+  status       String
+  /** ID retornado pelo provedor (Evolution API). Null quando driver=mock ou falha. */
+  providerId   String?  @map("provider_id")
+  errorMessage String?  @map("error_message")
+  sentByUserId String   @map("sent_by_user_id") @db.Uuid
+  /** Destinatário individual quando o envio foi DM (ex.: convite pro grupo). Null em broadcasts. */
+  targetUserId String?  @map("target_user_id") @db.Uuid
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  sentBy     User  @relation("BroadcastSent", fields: [sentByUserId], references: [id], onDelete: Cascade)
+  targetUser User? @relation("BroadcastTarget", fields: [targetUserId], references: [id], onDelete: SetNull)
+
+  @@index([createdAt])
+  @@index([sentByUserId])
+  @@index([targetUserId])
+  @@map("broadcast_logs")
 }
 
 model ProcessedWebhookEvent {

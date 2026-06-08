@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError } from '../../lib/api';
 import { flagUrl } from '../../lib/flags';
+import { AdminPageHeader } from '../../components/admin/AdminPageHeader';
 
 interface KnockoutFixture {
   matchId: string;
@@ -84,26 +85,19 @@ export function AdminKnockout() {
 
   return (
     <div className="space-y-6">
-      <header className="flex items-end justify-between flex-wrap gap-3">
-        <div>
-          <p className="text-xs font-bold tracking-[0.4em] text-gold-400">MATA-MATA</p>
-          <h1 className="font-display text-3xl tracking-wider text-white mt-1">
-            <span className="text-shimmer">CHAVEAMENTO REAL</span>
-          </h1>
-          <p className="text-sm text-emerald-200/70 mt-2 max-w-2xl">
-            Os confrontos são preenchidos automaticamente a partir dos resultados oficiais da
-            fase de grupos. Lance os placares de cada jogo — o vencedor avança sozinho pra
-            próxima fase e os palpites são pontuados.
-          </p>
-        </div>
-        <button
-          className="btn-secondary text-sm"
-          disabled={regenMutation.isPending}
-          onClick={() => regenMutation.mutate()}
-        >
-          {regenMutation.isPending ? 'Recalculando...' : '↻ Recalcular chaveamento'}
-        </button>
-      </header>
+      <AdminPageHeader
+        title="CHAVEAMENTO REAL"
+        subtitle="Os confrontos são preenchidos automaticamente a partir dos resultados oficiais da fase de grupos. Lance os placares de cada jogo — o vencedor avança sozinho pra próxima fase e os palpites são pontuados."
+        actions={
+          <button
+            className="btn-secondary text-sm"
+            disabled={regenMutation.isPending}
+            onClick={() => regenMutation.mutate()}
+          >
+            {regenMutation.isPending ? 'Recalculando...' : '↻ Recalcular'}
+          </button>
+        }
+      />
 
       {error && (
         <p className="text-sm text-red-200 bg-red-500/10 border border-red-400/30 rounded-xl p-3">

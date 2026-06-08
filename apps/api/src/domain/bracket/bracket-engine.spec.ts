@@ -181,8 +181,8 @@ describe('buildBracket — R16+ propagation via knockoutScores', () => {
       expect(f.predictedWinnerCode).toBe(tops.get(f.id));
     }
     const r16 = bracket.fixtures.find((f) => f.id === 'R16-89')!;
-    expect(r16.topTeamCode).toBe(tops.get('R32-73'));
-    expect(r16.bottomTeamCode).toBe(tops.get('R32-74'));
+    expect(r16.topTeamCode).toBe(tops.get('R32-74'));
+    expect(r16.bottomTeamCode).toBe(tops.get('R32-77'));
   });
 
   it('a draw without advancesTeamCode blocks downstream resolution', () => {
@@ -199,7 +199,8 @@ describe('buildBracket — R16+ propagation via knockoutScores', () => {
     });
     const r32 = bracket.fixtures.find((f) => f.id === 'R32-73')!;
     expect(r32.predictedWinnerCode).toBeNull();
-    const r16 = bracket.fixtures.find((f) => f.id === 'R16-89')!;
+    // R32-73 feeds R16-90 (topSlot) in the official FIFA bracket.
+    const r16 = bracket.fixtures.find((f) => f.id === 'R16-90')!;
     expect(r16.topTeamCode).toBeNull(); // chain broken
   });
 
@@ -223,7 +224,8 @@ describe('buildBracket — R16+ propagation via knockoutScores', () => {
     });
     const r32 = bracket.fixtures.find((f) => f.id === 'R32-73')!;
     expect(r32.predictedWinnerCode).toBe(r32_73_top);
-    const r16 = bracket.fixtures.find((f) => f.id === 'R16-89')!;
+    // R32-73 feeds R16-90 (topSlot) in the official FIFA bracket.
+    const r16 = bracket.fixtures.find((f) => f.id === 'R16-90')!;
     expect(r16.topTeamCode).toBe(r32_73_top);
   });
 

@@ -3,6 +3,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError } from '../../lib/api';
 import { flagUrl } from '../../lib/flags';
 import type { MatchDto } from '@bolao/shared';
+import { AdminPageHeader } from '../../components/admin/AdminPageHeader';
+import { AdminModal } from '../../components/admin/AdminModal';
 
 interface BulkResultRow {
   matchId: string;
@@ -259,38 +261,31 @@ export function AdminMatches() {
 
   return (
     <div className="space-y-6">
-      <header>
-        <p className="text-xs font-bold tracking-[0.4em] text-gold-400">ADMIN</p>
-        <h1 className="font-display text-3xl tracking-wider text-white mt-1">
-          <span className="text-shimmer">RESULTADOS</span>
-        </h1>
-        <p className="text-sm text-emerald-200/70 mt-2">
-          Registre o placar oficial de cada jogo. Antes de aplicar, veja o impacto:
-          quantos palpites são pontuados e como.
-        </p>
-        <div className="flex flex-wrap items-center gap-2 mt-4">
-          <button onClick={exportCsv} className="btn-secondary text-xs">
-            ⬇️ Exportar CSV (todos os jogos)
-          </button>
-          <button
-            onClick={() => fileRef.current?.click()}
-            className="btn-secondary text-xs"
-            disabled={importMutation.isPending}
-          >
-            {importMutation.isPending ? 'Importando...' : '⬆️ Importar CSV (resultados em lote)'}
-          </button>
-          <input
-            ref={fileRef}
-            type="file"
-            accept=".csv,text/csv"
-            onChange={onImportFile}
-            className="hidden"
-          />
-          <span className="text-[11px] text-emerald-200/50">
-            Exporte, preencha gols_mandante/gols_visitante e reimporte.
-          </span>
-        </div>
-      </header>
+      <AdminPageHeader
+        title="RESULTADOS"
+        subtitle="Registre o placar oficial de cada jogo. Antes de aplicar, veja o impacto: quantos palpites são pontuados e como."
+        actions={
+          <>
+            <button onClick={exportCsv} className="btn-secondary text-xs">
+              ⬇️ CSV
+            </button>
+            <button
+              onClick={() => fileRef.current?.click()}
+              className="btn-secondary text-xs"
+              disabled={importMutation.isPending}
+            >
+              {importMutation.isPending ? 'Importando...' : '⬆️ Importar CSV'}
+            </button>
+            <input
+              ref={fileRef}
+              type="file"
+              accept=".csv,text/csv"
+              onChange={onImportFile}
+              className="hidden"
+            />
+          </>
+        }
+      />
 
       {bulkSummary && (
         <div className="card border-emerald-400/40 bg-emerald-500/10 text-sm">
@@ -459,18 +454,21 @@ function MatchRow({ match, draft, onChange, onPreview, previewLoading }: RowProp
   return (
     <div
       className={
-        'rounded-xl border px-3 py-3 grid grid-cols-[auto,1fr,auto,1fr,auto] items-center gap-3 ' +
+        'rounded-xl border px-3 py-3 flex flex-wrap items-center gap-x-3 gap-y-2 ' +
+        'sm:grid sm:grid-cols-[auto,1fr,auto,1fr,auto] sm:gap-3 ' +
         (isRegistered
           ? 'border-emerald-500/25 bg-emerald-900/15'
           : 'border-emerald-500/15 bg-midnight-900/40')
       }
     >
-      <div className="text-[11px] text-emerald-300/70 min-w-[120px]">
+      {/* Linha 1 (mobile) / col 1 (desktop): horário + grupo */}
+      <div className="w-full sm:w-auto sm:min-w-[120px] flex justify-between sm:block text-[11px] text-emerald-300/70">
         <p className="font-semibold text-emerald-200/80">{kickoffLabel(match.kickoffAt)}</p>
         <p className="text-emerald-200/50">Grupo {match.groupLetter} · R{match.roundNumber}</p>
       </div>
 
-      <div className="flex items-center justify-end gap-2 min-w-0">
+      {/* Home team — no mobile fica em flex 1 do "ww" do meio */}
+      <div className="flex flex-1 sm:flex-none items-center justify-end gap-2 min-w-0">
         <span className="text-sm text-emerald-50 truncate">
           {match.homeTeamName ?? match.homeTeamCode}
         </span>
@@ -479,6 +477,7 @@ function MatchRow({ match, draft, onChange, onPreview, previewLoading }: RowProp
         )}
       </div>
 
+      {/* Inputs */}
       <div className="flex items-center gap-2">
         <input
           inputMode="numeric"
@@ -503,7 +502,8 @@ function MatchRow({ match, draft, onChange, onPreview, previewLoading }: RowProp
         />
       </div>
 
-      <div className="flex items-center gap-2 min-w-0">
+      {/* Away team */}
+      <div className="flex flex-1 sm:flex-none items-center gap-2 min-w-0">
         {awayFlag && (
           <img src={awayFlag} alt="" loading="lazy" className="w-7 h-5 object-cover rounded-sm ring-1 ring-black/20" />
         )}
@@ -512,7 +512,8 @@ function MatchRow({ match, draft, onChange, onPreview, previewLoading }: RowProp
         </span>
       </div>
 
-      <div>
+      {/* Botão — full width no mobile, encaixado no grid no desktop */}
+      <div className="w-full sm:w-auto flex justify-end">
         {isRegistered && !draft ? (
           <span className="chip text-[10px]">✓ Registrado</span>
         ) : (
@@ -542,67 +543,64 @@ function PreviewModal({ match, preview, onClose, onConfirm, confirming }: ModalP
   const rules = Object.entries(preview.pointsByRule).sort((a, b) => b[1].points - a[1].points);
 
   return (
-    <div className="fixed inset-0 z-40 grid place-items-center bg-black/70 p-4" onClick={onClose}>
-      <div className="card-glow max-w-lg w-full" onClick={(e) => e.stopPropagation()}>
-        <h3 className="font-display text-2xl text-white tracking-wider mb-1">
-          PRÉ-VISUALIZAR IMPACTO
-        </h3>
-        <p className="text-sm text-emerald-200/70 mb-4">
-          {match.homeTeamCode} <strong className="text-gold-300">{preview.homeGoals}</strong>
-          {' × '}
-          <strong className="text-gold-300">{preview.awayGoals}</strong> {match.awayTeamCode}
-        </p>
-
-        {preview.noChange && (
-          <p className="text-sm text-amber-200 bg-amber-500/10 border border-amber-500/30 rounded-xl p-3 mb-4">
-            ⚠️ Esse placar já era o registrado. Confirmar é um no-op.
-          </p>
-        )}
-
-        <div className="grid grid-cols-2 gap-3 mb-4">
-          <div className="rounded-lg border border-emerald-500/15 bg-midnight-900/40 px-3 py-2">
-            <p className="text-[10px] tracking-widest text-emerald-300/60">PALPITES AFETADOS</p>
-            <p className="font-display text-2xl text-white">{preview.affectedGuesses}</p>
-          </div>
-          <div className="rounded-lg border border-gold-400/30 bg-gold-400/10 px-3 py-2">
-            <p className="text-[10px] tracking-widest text-gold-300/80">PONTOS A ENTREGAR</p>
-            <p className="font-display text-2xl text-gold-100">{preview.totalPointsAwarded}</p>
-          </div>
-        </div>
-
-        {rules.length > 0 && (
-          <div className="mb-4">
-            <p className="text-[10px] tracking-widest text-emerald-300/60 mb-2">DETALHAMENTO POR REGRA</p>
-            <ul className="space-y-1">
-              {rules.map(([rule, info]) => (
-                <li
-                  key={rule}
-                  className="flex items-center justify-between text-xs border-b border-emerald-500/10 py-1"
-                >
-                  <span className="text-emerald-100/85">{RULE_LABEL[rule] ?? rule}</span>
-                  <span className="text-emerald-200/70">
-                    {info.count} palpites · {info.points} pts
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-
-        <div className="flex justify-end gap-2">
+    <AdminModal
+      open
+      onClose={onClose}
+      maxWidth="lg"
+      title={<span className="font-display text-2xl text-white tracking-wider">PRÉ-VISUALIZAR IMPACTO</span>}
+      footer={
+        <>
           <button className="btn-secondary text-sm" onClick={onClose}>
             Cancelar
           </button>
-          <button
-            className="btn-gold text-sm"
-            onClick={onConfirm}
-            disabled={confirming}
-          >
+          <button className="btn-gold text-sm" onClick={onConfirm} disabled={confirming}>
             {confirming ? 'Aplicando...' : 'Confirmar e registrar'}
           </button>
+        </>
+      }
+    >
+      <p className="text-sm text-emerald-200/70">
+        {match.homeTeamCode} <strong className="text-gold-300">{preview.homeGoals}</strong>
+        {' × '}
+        <strong className="text-gold-300">{preview.awayGoals}</strong> {match.awayTeamCode}
+      </p>
+
+      {preview.noChange && (
+        <p className="text-sm text-amber-200 bg-amber-500/10 border border-amber-500/30 rounded-xl p-3">
+          ⚠️ Esse placar já era o registrado. Confirmar é um no-op.
+        </p>
+      )}
+
+      <div className="grid grid-cols-2 gap-3">
+        <div className="rounded-lg border border-emerald-500/15 bg-midnight-900/40 px-3 py-2">
+          <p className="text-[10px] tracking-widest text-emerald-300/60">PALPITES AFETADOS</p>
+          <p className="font-display text-2xl text-white">{preview.affectedGuesses}</p>
+        </div>
+        <div className="rounded-lg border border-gold-400/30 bg-gold-400/10 px-3 py-2">
+          <p className="text-[10px] tracking-widest text-gold-300/80">PONTOS A ENTREGAR</p>
+          <p className="font-display text-2xl text-gold-100">{preview.totalPointsAwarded}</p>
         </div>
       </div>
-    </div>
+
+      {rules.length > 0 && (
+        <div>
+          <p className="text-[10px] tracking-widest text-emerald-300/60 mb-2">DETALHAMENTO POR REGRA</p>
+          <ul className="space-y-1">
+            {rules.map(([rule, info]) => (
+              <li
+                key={rule}
+                className="flex items-center justify-between text-xs border-b border-emerald-500/10 py-1"
+              >
+                <span className="text-emerald-100/85">{RULE_LABEL[rule] ?? rule}</span>
+                <span className="text-emerald-200/70">
+                  {info.count} palpites · {info.points} pts
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </AdminModal>
   );
 }
 

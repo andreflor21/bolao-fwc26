@@ -109,6 +109,21 @@ export class EmailService {
     });
   }
 
+  /**
+   * Disparado quando o bracket do mata-mata de um jogador é resetado por
+   * correção do chaveamento oficial — pede que ele refaça os palpites do KO.
+   */
+  async sendBracketResetNotice(to: string, name: string): Promise<void> {
+    const link = `${this.webOrigin}/knockout-guesses`;
+    await this.render(to, 'Importante: refaça seus palpites do mata-mata ⚠️', {
+      heading: 'Refaça seu mata-mata',
+      bodyHtml: `<p>Olá ${name}, corrigimos o chaveamento das fases finais (oitavas em diante) para refletir a chave <strong>oficial da FIFA</strong>. Por isso, seus palpites do mata-mata foram zerados e precisam ser refeitos.</p>
+        <p>Seus palpites da <strong>fase de grupos continuam salvos</strong> — é só refazer o bracket do mata-mata. Leva poucos minutos.</p>`,
+      text: `Olá ${name},\n\nCorrigimos o chaveamento das fases finais para a chave oficial da FIFA. Seus palpites do mata-mata foram zerados e precisam ser refeitos (os de grupos continuam salvos).\n\nRefaça em: ${link}`,
+      cta: { label: 'Refazer mata-mata', url: link },
+    });
+  }
+
   /** Disparado no closure, para cada premiado com userId. */
   async sendPrizeAwarded(
     to: string,
