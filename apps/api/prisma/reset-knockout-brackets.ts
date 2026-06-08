@@ -4,30 +4,38 @@ import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { EmailService } from '../src/email/email.service';
 import { BroadcastService } from '../src/broadcast/broadcast.service';
-import { FIFA_WC_2026_ID } from '@bolao/shared';
+import { FIFA_WC_2026_ID, type GroupLetter } from '@bolao/shared';
+import { buildBracket } from '../src/domain/bracket/bracket-engine';
+import type { FifaRanks, GroupMatchResult } from '../src/domain/bracket/types';
 
 /**
  * Reset dos brackets de mata-mata após a correção do chaveamento oficial FIFA
  * 2026 (oitavas/quartas estavam pareadas errado). A correção afeta R16+; quem
  * já gerou o mata-mata fez palpites sobre confrontos que mudaram, então o
- * bracket precisa ser refeito.
+ * mata-mata precisa ser refeito.
+ *
+ * IMPORTANTE — NÃO deleta a BracketPrediction. Deletá-la deixava o jogador num
+ * estado morto: os Guess de grupo continuam `submittedAt`, então submit() recusa
+ * recriar o bracket (GROUP_ALREADY_SUBMITTED) e saveManualTiebreakOrder/
+ * submitKnockoutGuesses recusam por falta de bracket. Em vez disso, REGENERA a
+ * BracketPrediction a partir dos Guess submetidos (chave correta, R32 intacta) e
+ * ZERA só o mata-mata (knockoutScores={}, knockoutSubmittedAt=null). Preserva os
+ * palpites de grupo e mantém o jogador num estado funcional.
  *
  * O que o script faz (para a competição fifa-wc-2026):
  *   1. Identifica os jogadores AFETADOS = que já geraram o mata-mata
  *      (knockoutSubmittedAt != null OU têm algum palpite de fixture R16+).
- *   2. [--apply] Deleta a BracketPrediction inteira desses jogadores e os
- *      KnockoutGuessScore associados. Os palpites de GRUPO (tabela Guess)
- *      permanecem — o jogador só regenera o bracket e refaz o mata-mata.
+ *   2. [--apply] Regenera o bracket de cada afetado com o mata-mata zerado.
  *   3. [--apply] Envia o comunicado pedindo pra refazer:
  *        - E-mail individual (EmailService → SMTP) para cada afetado
  *        - 1 broadcast no grupo do WhatsApp (BroadcastService)
  *
  * Uso:
  *   npx ts-node --transpile-only prisma/reset-knockout-brackets.ts            # dry-run: só lista, não muda nada
- *   npx ts-node --transpile-only prisma/reset-knockout-brackets.ts --apply    # deleta + envia e-mail + WhatsApp
- *   ... --apply --no-email        # deleta + WhatsApp, sem e-mail
- *   ... --apply --no-whatsapp     # deleta + e-mail, sem WhatsApp
- *   ... --apply --no-delete       # só envia comunicado (não apaga nada)
+ *   npx ts-node --transpile-only prisma/reset-knockout-brackets.ts --apply    # regenera + envia e-mail + WhatsApp
+ *   ... --apply --no-email        # regenera + WhatsApp, sem e-mail
+ *   ... --apply --no-whatsapp     # regenera + e-mail, sem WhatsApp
+ *   ... --apply --no-reset        # só envia comunicado (não toca nos brackets)
  *
  * Drivers reais dependem do ambiente: EMAIL_DRIVER=smtp (+ SMTP_*) para e-mail
  * de verdade; WHATSAPP driver evolution para WhatsApp de verdade. Em mock, o
@@ -37,7 +45,7 @@ import { FIFA_WC_2026_ID } from '@bolao/shared';
 const APPLY = process.argv.includes('--apply');
 const NO_EMAIL = process.argv.includes('--no-email');
 const NO_WHATSAPP = process.argv.includes('--no-whatsapp');
-const NO_DELETE = process.argv.includes('--no-delete');
+const NO_RESET = process.argv.includes('--no-reset');
 
 /** Confrontos cujo pareamento mudou na correção (R16 em diante). */
 const AFFECTED_FIXTURE_IDS = new Set<string>([
@@ -50,6 +58,8 @@ const AFFECTED_FIXTURE_IDS = new Set<string>([
 interface StoredPayload {
   knockoutScores?: Record<string, unknown>;
   knockoutSubmittedAt?: string | null;
+  groupSubmittedAt?: string;
+  manualTiebreakOrder?: Partial<Record<GroupLetter, string[]>>;
 }
 
 /** Um jogador "gerou o mata-mata" se finalizou o KO ou palpitou algum R16+. */
@@ -86,7 +96,12 @@ async function main(): Promise<void> {
 
     const affected = predictions
       .filter((p) => generatedKnockout((p.payload ?? {}) as StoredPayload))
-      .map((p) => ({ userId: p.userId, name: p.user.name, email: p.user.email }));
+      .map((p) => ({
+        userId: p.userId,
+        name: p.user.name,
+        email: p.user.email,
+        payload: (p.payload ?? {}) as StoredPayload,
+      }));
 
     console.log(`\n📋 Brackets de mata-mata gerados: ${affected.length} (de ${predictions.length} brackets no total)\n`);
     for (const u of affected) {
@@ -100,23 +115,79 @@ async function main(): Promise<void> {
     }
 
     if (!APPLY) {
-      console.log('ℹ️  Dry-run. Nada foi deletado nem enviado. Rode com --apply para executar.\n');
+      console.log('ℹ️  Dry-run. Nada foi alterado nem enviado. Rode com --apply para executar.\n');
       return;
     }
 
     const affectedIds = affected.map((u) => u.userId);
 
-    // 2. Deleta os brackets (e os scores de KO). Palpites de grupo ficam.
-    if (NO_DELETE) {
-      console.log('⏭️  --no-delete: pulando a remoção dos brackets.\n');
+    // 2. Regenera o bracket de cada afetado com o mata-mata zerado (NÃO deleta —
+    //    deletar deixaria o jogador travado, ver doc no topo). Preserva grupos
+    //    e a ordem manual de desempate; limpa os scores de KO materializados.
+    if (NO_RESET) {
+      console.log('⏭️  --no-reset: pulando a regeneração dos brackets.\n');
     } else {
+      // Partidas de grupo (códigos + ranking FIFA semente) — base do bracket.
+      const groupMatches = await prisma.match.findMany({
+        where: { competitionId: FIFA_WC_2026_ID, stage: 'group' },
+        select: {
+          id: true,
+          groupLetter: true,
+          homeTeam: { select: { code: true, seededRank: true } },
+          awayTeam: { select: { code: true, seededRank: true } },
+        },
+      });
+      const groupMatchIds = groupMatches.map((m) => m.id);
+
+      let regen = 0;
+      for (const u of affected) {
+        const guesses = await prisma.guess.findMany({
+          where: { userId: u.userId, matchId: { in: groupMatchIds } },
+          select: { matchId: true, homeGoals: true, awayGoals: true },
+        });
+        const byMatch = new Map(guesses.map((g) => [g.matchId, g] as const));
+
+        const manual = u.payload.manualTiebreakOrder ?? {};
+        const matchResults: Array<GroupMatchResult & { groupLetter: GroupLetter }> = [];
+        const fifaRanks: FifaRanks = {};
+        for (const m of groupMatches) {
+          if (!m.homeTeam || !m.awayTeam || !m.groupLetter) continue;
+          fifaRanks[m.homeTeam.code] = m.homeTeam.seededRank;
+          fifaRanks[m.awayTeam.code] = m.awayTeam.seededRank;
+          const g = byMatch.get(m.id);
+          if (!g) continue;
+          matchResults.push({
+            groupLetter: m.groupLetter as GroupLetter,
+            homeTeamCode: m.homeTeam.code,
+            awayTeamCode: m.awayTeam.code,
+            homeGoals: g.homeGoals,
+            awayGoals: g.awayGoals,
+          });
+        }
+
+        const bracket = buildBracket({
+          groupMatches: matchResults,
+          fifaRanks,
+          manualTiebreakOrder: manual,
+        });
+        const payload = {
+          bracket,
+          knockoutScores: {},
+          manualTiebreakOrder: manual,
+          groupSubmittedAt: u.payload.groupSubmittedAt ?? new Date().toISOString(),
+          knockoutSubmittedAt: null,
+        };
+        await prisma.bracketPrediction.update({
+          where: { userId_competitionId: { userId: u.userId, competitionId: FIFA_WC_2026_ID } },
+          data: { payload: payload as unknown as object },
+        });
+        regen++;
+      }
+      // Limpa scores de KO materializados (só existem se já houve resultado oficial).
       const delScores = await prisma.knockoutGuessScore.deleteMany({
         where: { competitionId: FIFA_WC_2026_ID, userId: { in: affectedIds } },
       });
-      const delBrackets = await prisma.bracketPrediction.deleteMany({
-        where: { competitionId: FIFA_WC_2026_ID, userId: { in: affectedIds } },
-      });
-      console.log(`🗑️  Removidos: ${delBrackets.count} brackets, ${delScores.count} scores de KO.\n`);
+      console.log(`♻️  Regenerados: ${regen} brackets (mata-mata zerado), ${delScores.count} scores de KO limpos.\n`);
     }
 
     // 3a. Comunicado por e-mail (individual).
