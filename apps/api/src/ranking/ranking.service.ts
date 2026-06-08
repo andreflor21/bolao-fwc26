@@ -2,7 +2,12 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import Redis from 'ioredis';
 import { PrismaService } from '../prisma/prisma.service';
 import { REDIS_CLIENT } from '../redis/redis.tokens';
-import { FIFA_WC_2026_ID, type RankingDto, type RankingRowDto } from '@bolao/shared';
+import {
+  FIFA_WC_2026_ID,
+  SCORE_RULES,
+  type RankingDto,
+  type RankingRowDto,
+} from '@bolao/shared';
 
 const KEYS = {
   general: 'bolao:ranking:general',
@@ -55,7 +60,7 @@ export class RankingService {
       }),
       this.prisma.knockoutGuessScore.findMany({
         where: { userId },
-        select: { points: true },
+        select: { points: true, scorePoints: true },
       }),
     ]);
 
@@ -63,7 +68,13 @@ export class RankingService {
     const groupPoints = scores.reduce((sum, s) => sum + s.points, 0);
     const koPoints = knockoutScores.reduce((sum, s) => sum + s.points, 0);
     const totalPoints = groupPoints + koPoints;
-    const exactCount = scores.filter((s) => s.ruleApplied === 'EXACT_SCORE').length;
+    // Placares certos (cravadas) = exatos da fase de grupos + exatos do mata-mata
+    // (no KO, placar exato ⇒ scorePoints == EXACT_SCORE). Usado como desempate.
+    const groupExact = scores.filter((s) => s.ruleApplied === 'EXACT_SCORE').length;
+    const koExact = knockoutScores.filter(
+      (s) => s.scorePoints === SCORE_RULES.EXACT_SCORE,
+    ).length;
+    const exactCount = groupExact + koExact;
 
     const memberships = await this.prisma.sidePoolMember.findMany({
       where: { userId },
@@ -193,26 +204,30 @@ export class RankingService {
       displayIds.map((id, idx) => [id, Number(exactCounts[idx] ?? 0)]),
     );
 
-    // Sort unscored alphabetically for a stable, predictable order.
-    unscoredIds.sort((a, b) =>
-      (userById.get(a) ?? '').localeCompare(userById.get(b) ?? '', 'pt'),
-    );
+    // Pontuação por usuário: marcados vêm do ZSET; não-marcados entram com 0.
+    const pointsById = new Map<string, number>(scored);
 
-    const ordered: Array<[string, number]> = [
-      ...scored,
-      ...unscoredIds.map((id) => [id, 0] as [string, number]),
-    ];
+    // Ordenação final com DESEMPATE determinístico:
+    //   1) pontos (desc)
+    //   2) placares certos / cravadas (desc)
+    //   3) nome em ordem alfabética (pt) — usado quando tudo está empatado.
+    const allRows: RankingRowDto[] = displayIds
+      .map((userId) => ({
+        userId,
+        name: userById.get(userId) ?? '—',
+        points: pointsById.get(userId) ?? 0,
+        exactScores: exactById.get(userId) ?? 0,
+        isOwn: opts.userId === userId,
+      }))
+      .sort(
+        (a, b) =>
+          b.points - a.points ||
+          b.exactScores - a.exactScores ||
+          a.name.localeCompare(b.name, 'pt'),
+      )
+      .map((r, idx) => ({ position: idx + 1, ...r }));
 
-    const allRows: RankingRowDto[] = ordered.map(([userId, points], idx) => ({
-      position: idx + 1,
-      userId,
-      name: userById.get(userId) ?? '—',
-      points,
-      exactScores: exactById.get(userId) ?? 0,
-      isOwn: opts.userId === userId,
-    }));
-
-    const total = ordered.length;
+    const total = allRows.length;
     const ownRow = opts.userId
       ? allRows.find((r) => r.userId === opts.userId) ?? null
       : null;
