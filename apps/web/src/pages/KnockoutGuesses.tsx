@@ -195,6 +195,8 @@ export function KnockoutGuesses() {
 
   const filledCount = Object.keys(draft).length;
   const alreadySubmitted = Boolean(data.submittedAt);
+  // Travado = janela fechada (deadline) OU já submetido (finalizado, imutável).
+  const locked = !data.isOpen || alreadySubmitted;
   const drawsMissingAdvances = Object.entries(draft).filter(
     ([, s]) => s.homeGoals === s.awayGoals && !s.advancesTeamCode,
   ).length;
@@ -268,7 +270,7 @@ export function KnockoutGuesses() {
                   guess={draft[f.id]}
                   score={data.points?.[f.id]}
                   official={data.officialResults?.[f.id]}
-                  readOnly={!data.isOpen}
+                  readOnly={locked}
                   onChange={(home, away) => updateScore(f, home, away)}
                   onAdvancesChange={(code) => updateAdvances(f.id, code)}
                 />
@@ -281,26 +283,30 @@ export function KnockoutGuesses() {
       <div className="fixed bottom-0 inset-x-0 z-20 border-t border-emerald-500/20 bg-midnight-900/90 backdrop-blur-md">
         <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
           <div className="text-xs text-emerald-200/70">
-            {!data.isOpen
-              ? '🔒 Janela fechada — palpites de mata-mata travados'
-              : `${filledCount}/32 preenchidos · trava em ${locksIn}`}
+            {alreadySubmitted
+              ? '🔒 Mata-mata finalizado — seus palpites não podem mais ser alterados'
+              : !data.isOpen
+                ? '🔒 Janela fechada — palpites de mata-mata travados'
+                : `${filledCount}/32 preenchidos · trava em ${locksIn}`}
           </div>
           <div className="flex items-center gap-2">
             <Link to="/bracket" className="btn-secondary text-sm">
               Ver chaveamento
             </Link>
-            <button
-              className="btn-gold text-sm"
-              disabled={
-                !data.isOpen ||
-                filledCount === 0 ||
-                drawsMissingAdvances > 0 ||
-                submitMutation.isPending
-              }
-              onClick={() => setShowConfirm(true)}
-            >
-              {submitMutation.isPending ? 'Enviando...' : 'Submeter palpites de KO →'}
-            </button>
+            {!alreadySubmitted && (
+              <button
+                className="btn-gold text-sm"
+                disabled={
+                  locked ||
+                  filledCount === 0 ||
+                  drawsMissingAdvances > 0 ||
+                  submitMutation.isPending
+                }
+                onClick={() => setShowConfirm(true)}
+              >
+                {submitMutation.isPending ? 'Enviando...' : 'Submeter palpites de KO →'}
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -319,7 +325,8 @@ export function KnockoutGuesses() {
             </h3>
             <p className="text-sm text-emerald-100/85 mb-4">
               Você vai submeter <strong>{filledCount}</strong> palpites de placar de mata-mata.
-              Você ainda pode editar até <strong>{locksIn}</strong> antes da trava.
+              <strong className="text-gold-200"> Atenção:</strong> depois de confirmar, os palpites
+              do mata-mata <strong>não poderão mais ser alterados</strong>.
             </p>
             <div className="flex justify-end gap-2">
               <button className="btn-secondary text-sm" onClick={() => setShowConfirm(false)}>

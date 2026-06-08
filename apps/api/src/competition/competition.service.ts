@@ -3,6 +3,9 @@ import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { FIFA_WC_2026_ID } from '@bolao/shared';
 
+/** Antecedência da trava geral: 1h antes do apito do primeiro jogo da Copa. */
+const LOCK_LEAD_MS = 60 * 60 * 1000;
+
 @Injectable()
 export class CompetitionService {
   constructor(
@@ -19,57 +22,53 @@ export class CompetitionService {
   }
 
   /**
-   * Knockout-stage palpites lock. Sourced from COMPETITION_KO_LOCKS_AT env
-   * var (ISO 8601 UTC); falls back to `locksAt + 19 days` (rough FIFA
-   * timeline from group lock to first KO) when unset.
+   * TRAVA GERAL — vale para TODOS os 104 jogos (fase de grupos + mata-mata).
+   * É 1h antes do apito do primeiro jogo da Copa. `competition.locksAt` guarda
+   * o horário do primeiro jogo (vindo de COMPETITION_LOCKS_AT); a trava é esse
+   * horário menos 1h. Depois disso, nenhum palpite (grupo ou mata-mata) pode
+   * ser enviado ou alterado.
+   */
+  async getLockAt(): Promise<Date> {
+    const competition = await this.getMain();
+    return new Date(competition.locksAt.getTime() - LOCK_LEAD_MS);
+  }
+
+  /**
+   * @deprecated Use `getLockAt()`. Mantido para compatibilidade — agora retorna
+   * a mesma trava geral (1h antes do primeiro jogo da Copa).
    */
   async getKnockoutLockAt(): Promise<Date> {
-    const fromEnv = this.config.get<string>('COMPETITION_KO_LOCKS_AT');
-    if (fromEnv) {
-      const parsed = new Date(fromEnv);
-      if (!Number.isNaN(parsed.getTime())) return parsed;
-    }
-    const competition = await this.getMain();
-    return new Date(competition.locksAt.getTime() + 19 * 24 * 3600 * 1000);
+    return this.getLockAt();
   }
 
   /**
-   * Asserts that group-stage palpites are still open. Uses the database
-   * clock (NOW()) rather than the application clock to eliminate drift
-   * between API replicas. Throws 403 LOCKED_COMPETITION if past the lock.
+   * Garante que os palpites ainda estão abertos contra a TRAVA GERAL. Usa o
+   * relógio do banco (NOW()) em vez do relógio da aplicação para eliminar drift
+   * entre réplicas da API. Lança 403 LOCKED_COMPETITION após a trava ou se a
+   * competição não estiver mais com closureStatus = 'open'.
    */
+  private async assertWithinLockWindow(code: 'LOCKED_COMPETITION' | 'LOCKED_KNOCKOUT'): Promise<void> {
+    const rows = await this.prisma.$queryRaw<Array<{ now: Date }>>`SELECT NOW() as now`;
+    const now = rows[0]?.now ?? new Date();
+    const competition = await this.getMain();
+    const lockAt = new Date(competition.locksAt.getTime() - LOCK_LEAD_MS);
+
+    if (competition.closureStatus !== 'open' || lockAt <= now) {
+      throw new ForbiddenException({
+        code,
+        message: 'Palpites travados — o envio fecha 1h antes do primeiro jogo da Copa.',
+        locksAt: lockAt.toISOString(),
+      });
+    }
+  }
+
+  /** Trava de palpites da fase de grupos (trava geral). */
   async assertOpen(): Promise<void> {
-    const rows = await this.prisma.$queryRaw<Array<{ now: Date }>>`SELECT NOW() as now`;
-    const now = rows[0]?.now ?? new Date();
-    const competition = await this.getMain();
-
-    if (competition.closureStatus !== 'open' || competition.locksAt <= now) {
-      throw new ForbiddenException({
-        code: 'LOCKED_COMPETITION',
-        message: 'Competition is locked — no more guess submissions allowed',
-        locksAt: competition.locksAt.toISOString(),
-      });
-    }
+    await this.assertWithinLockWindow('LOCKED_COMPETITION');
   }
 
-  /**
-   * Asserts that knockout palpites are still open. Throws 403
-   * LOCKED_KNOCKOUT past `getKnockoutLockAt()`.
-   *
-   * Note: group palpites must already be submitted (caller's responsibility).
-   * This guard only enforces the per-phase deadline.
-   */
+  /** Trava de palpites do mata-mata — a MESMA trava geral da fase de grupos. */
   async assertKnockoutOpen(): Promise<void> {
-    const rows = await this.prisma.$queryRaw<Array<{ now: Date }>>`SELECT NOW() as now`;
-    const now = rows[0]?.now ?? new Date();
-    const knockoutLock = await this.getKnockoutLockAt();
-
-    if (knockoutLock <= now) {
-      throw new ForbiddenException({
-        code: 'LOCKED_KNOCKOUT',
-        message: 'Knockout palpites are locked — submissions closed 1h before the first KO match',
-        knockoutLocksAt: knockoutLock.toISOString(),
-      });
-    }
+    await this.assertWithinLockWindow('LOCKED_KNOCKOUT');
   }
 }

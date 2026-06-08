@@ -17,6 +17,8 @@
     "bracket:reset": "ts-node --transpile-only prisma/reset-knockout-brackets.ts --apply",
     "bracket:repair-list": "ts-node --transpile-only prisma/repair-knockout-brackets.ts",
     "bracket:repair": "ts-node --transpile-only prisma/repair-knockout-brackets.ts --apply",
+    "ko:finalize-list": "ts-node --transpile-only prisma/finalize-knockout-submitted.ts",
+    "ko:finalize": "ts-node --transpile-only prisma/finalize-knockout-submitted.ts --apply",
     "prisma": "prisma"
   },
   "prisma": {

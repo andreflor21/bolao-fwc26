@@ -108,6 +108,21 @@ export class GuessService {
     }
   }
 
+  /**
+   * Garante que o mata-mata ainda NÃO foi finalizado. Uma vez submetido
+   * (knockoutSubmittedAt setado), o bracket fica congelado — nenhum score,
+   * desempate ou re-submissão é aceito (mesma regra da fase de grupos).
+   */
+  private assertKnockoutNotSubmitted(payload: StoredBracketPayload): void {
+    if (payload.knockoutSubmittedAt) {
+      throw new ConflictException({
+        code: 'KNOCKOUT_ALREADY_SUBMITTED',
+        message:
+          'Seus palpites do mata-mata já foram finalizados e não podem mais ser alterados.',
+      });
+    }
+  }
+
   async saveDraft(userId: string, body: SaveDraftGuessesBody): Promise<{ saved: number }> {
     await this.competition.assertOpen();
     await this.assertGroupNotSubmitted(userId);
@@ -467,6 +482,7 @@ export class GuessService {
         message: 'Submit group palpites before saving knockout scores',
       });
     }
+    this.assertKnockoutNotSubmitted(existing);
 
     const fixtureIndex = new Map(existing.bracket.fixtures.map((f) => [f.id, f] as const));
     const invalid = body.scores.filter((s) => !fixtureIndex.has(s.fixtureId));
@@ -551,8 +567,9 @@ export class GuessService {
   }
 
   /**
-   * Marks the knockout submission as final. Idempotent: re-submitting
-   * refreshes the timestamp.
+   * Marca a submissão do mata-mata como final. Uma vez submetido, NÃO pode mais
+   * ser alterado nem re-submetido (igual à fase de grupos) — lança
+   * KNOCKOUT_ALREADY_SUBMITTED.
    */
   async submitKnockoutGuesses(
     userId: string,
@@ -566,6 +583,7 @@ export class GuessService {
         message: 'Submit group palpites before submitting knockout scores',
       });
     }
+    this.assertKnockoutNotSubmitted(existing);
 
     const now = new Date();
     const payload: StoredBracketPayload = {
@@ -624,6 +642,7 @@ export class GuessService {
         message: 'Submit group palpites before saving manual tie-break order',
       });
     }
+    this.assertKnockoutNotSubmitted(existing);
 
     const merged: Partial<Record<GroupLetter, string[]>> = {
       ...(existing.manualTiebreakOrder ?? {}),
