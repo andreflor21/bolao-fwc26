@@ -24,8 +24,8 @@ export function Ranking() {
 
   const path =
     choice.kind === 'general'
-      ? '/general-pool/ranking?limit=100'
-      : `/side-pools/${choice.id}/ranking?limit=100`;
+      ? '/general-pool/ranking?limit=1000'
+      : `/side-pools/${choice.id}/ranking?limit=1000`;
 
   const rankingQuery = useQuery({
     queryKey: ['ranking', choice],
