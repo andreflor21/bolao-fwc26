@@ -1,4 +1,4 @@
-import { IsIn, IsOptional, IsString, IsUUID } from 'class-validator';
+import { IsIn, IsInt, IsOptional, IsString, IsUUID, Max, Min } from 'class-validator';
 import type { BroadcastPresetKey } from '../broadcast-ai.service';
 
 const PRESET_KEYS = [
@@ -6,6 +6,7 @@ const PRESET_KEYS = [
   'win-draw-probabilities',
   'match-result-recap',
   'reminder-lock-soon',
+  'who-is-nailing',
 ] as const;
 
 export class PreviewBroadcastBody {
@@ -17,4 +18,17 @@ export class PreviewBroadcastBody {
   @IsOptional()
   @IsUUID()
   matchId?: string;
+
+  /** Placar atual do jogo (preset "who-is-nailing") — informado pelo admin no disparo. */
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(30)
+  homeGoals?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(30)
+  awayGoals?: number;
 }

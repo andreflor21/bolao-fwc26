@@ -35,4 +35,12 @@ export class ProfileController {
   ) {
     return this.profile.getKnockoutGuesses(user.id, targetUserId);
   }
+
+  @Get(':userId/evolution')
+  evolution(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('userId', new ParseUUIDPipe()) targetUserId: string,
+  ) {
+    return this.profile.getRankingEvolution(user.id, targetUserId);
+  }
 }

@@ -103,14 +103,13 @@ export function Ranking() {
         </div>
       ) : (
         <section className="card">
-          <div className="overflow-x-auto">
-          <table className="w-full text-sm min-w-[420px]">
+          <table className="w-full table-fixed text-sm">
             <thead>
               <tr className="text-emerald-300/60 text-[11px] tracking-widest">
-                <th className="text-left py-2 w-12">#</th>
+                <th className="text-left py-2 w-9">#</th>
                 <th className="text-left py-2">JOGADOR</th>
-                <th className="text-right py-2 w-20">EXATOS</th>
-                <th className="text-right py-2 w-20">PONTOS</th>
+                <th className="text-right py-2 w-16">PONTOS</th>
+                <th className="text-right py-2 w-16">EXATOS</th>
               </tr>
             </thead>
             <tbody>
@@ -135,17 +134,16 @@ export function Ranking() {
                       row.position
                     )}
                   </td>
-                  <td className="py-2">
+                  <td className="py-2 pr-2 break-words">
                     {row.name}
                     {row.isOwn && <span className="ml-2 chip text-[10px]">você</span>}
                   </td>
-                  <td className="py-2 text-right">{row.exactScores}</td>
                   <td className="py-2 text-right font-display text-base">{row.points}</td>
+                  <td className="py-2 text-right">{row.exactScores}</td>
                 </tr>
               ))}
             </tbody>
           </table>
-          </div>
 
           {ranking?.ownPosition && ranking.ownPosition > ranking.rows.length && (
             <p className="mt-4 text-xs text-emerald-200/70">

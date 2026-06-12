@@ -87,9 +87,10 @@ export function computeBreakdown(
 
 /**
  * Computes the final payout list from the closing ranking. Ties at a
- * positional slot split that slot's prize equally; the subsequent positions
- * are skipped (3 tied at 1st ⇒ no 2nd, no 3rd; the next prize awarded is
- * 4th, going to the actual 4th-ranked user).
+ * positional slot split that slot's prize equally; subsequent positions are
+ * NOT skipped — the next distinct points group takes the next prize (dense
+ * ranking). 3 tied at 1st ⇒ they split the 1st prize, and the next group is
+ * awarded 2nd. Every prize from 1st to 5th is handed out.
  *
  * Exact-score king is split equally among everyone tied at the top counter.
  * Admin prize is left with `userId: null` so the operator team can claim or
@@ -139,7 +140,9 @@ export function finalize(
       });
     }
 
-    nextPosition += tieGroup.length;
+    // Colocação densa: empatados dividem a posição, mas o próximo grupo recebe
+    // a posição seguinte (sem pular prêmios) — espelha o ranking ao vivo.
+    nextPosition += 1;
     cursorIdx = j;
   }
 
@@ -202,7 +205,10 @@ function positionalLeaders(ranking: RankedUser[]): Record<PrizeCategory, PrizeLe
         metric: u.points,
       }));
     }
-    nextPos += group.length;
+    // Posições "densas" (1,2,3,4,5): empatados dividem a mesma posição, mas o
+    // próximo grupo de pontos ocupa a posição seguinte — sem pular slots, então
+    // todas as 5 colocações são preenchidas até o 5º.
+    nextPos += 1;
     cursor = j;
   }
   return out;

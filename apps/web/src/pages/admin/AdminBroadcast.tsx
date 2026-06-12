@@ -10,7 +10,8 @@ type PresetKey =
   | 'top-guesses-today'
   | 'win-draw-probabilities'
   | 'match-result-recap'
-  | 'reminder-lock-soon';
+  | 'reminder-lock-soon'
+  | 'who-is-nailing';
 
 interface PresetMeta {
   key: PresetKey;
@@ -18,8 +19,10 @@ interface PresetMeta {
   label: string;
   description: string;
   needsMatch: boolean;
+  /** Pede o placar atual do jogo (admin informa no disparo). */
+  needsScore?: boolean;
   /** Filtra os jogos elegíveis no select de matchId. */
-  matchFilter: 'upcoming' | 'finished' | 'any';
+  matchFilter: 'upcoming' | 'finished' | 'live' | 'any';
 }
 
 const PRESETS: PresetMeta[] = [
@@ -46,6 +49,15 @@ const PRESETS: PresetMeta[] = [
     description: 'Comemora o placar oficial recém-cadastrado e cita a quantidade de cravadores.',
     needsMatch: true,
     matchFilter: 'finished',
+  },
+  {
+    key: 'who-is-nailing',
+    emoji: '🎯',
+    label: 'Quem está cravando agora',
+    description: 'Você informa o placar do jogo no momento e a mensagem mostra quem está exatamente nesse placar (com nomes).',
+    needsMatch: true,
+    needsScore: true,
+    matchFilter: 'live',
   },
   {
     key: 'reminder-lock-soon',
@@ -95,6 +107,8 @@ export function AdminBroadcast() {
   const qc = useQueryClient();
   const [presetKey, setPresetKey] = useState<PresetKey>('top-guesses-today');
   const [matchId, setMatchId] = useState<string>('');
+  const [homeGoals, setHomeGoals] = useState<string>('');
+  const [awayGoals, setAwayGoals] = useState<string>('');
   const [text, setText] = useState<string>('');
   const [source, setSource] = useState<PreviewResponse['source'] | null>(null);
   const [whatsappDriver, setWhatsappDriver] = useState<PreviewResponse['whatsappDriver']>('mock');
@@ -120,6 +134,12 @@ export function AdminBroadcast() {
     if (preset.matchFilter === 'finished') {
       return all.filter((m) => m.homeGoalsOfficial !== null).slice(-30);
     }
+    if (preset.matchFilter === 'live') {
+      // Jogos que já começaram mas ainda não têm placar oficial lançado.
+      return all
+        .filter((m) => new Date(m.kickoffAt) <= now && m.homeGoalsOfficial === null)
+        .slice(-30);
+    }
     return all;
   }, [matchesQuery.data, preset.matchFilter]);
 
@@ -127,7 +147,13 @@ export function AdminBroadcast() {
     mutationFn: () =>
       api<PreviewResponse>('/admin/broadcast/preview', {
         method: 'POST',
-        body: JSON.stringify({ presetKey, matchId: matchId || undefined }),
+        body: JSON.stringify({
+          presetKey,
+          matchId: matchId || undefined,
+          ...(preset.needsScore
+            ? { homeGoals: Number(homeGoals), awayGoals: Number(awayGoals) }
+            : {}),
+        }),
       }),
     onSuccess: (data) => {
       setText(data.text);
@@ -223,6 +249,8 @@ export function AdminBroadcast() {
                   onClick={() => {
                     setPresetKey(p.key);
                     setMatchId('');
+                    setHomeGoals('');
+                    setAwayGoals('');
                   }}
                   className={
                     'text-left rounded-xl border px-3 py-2 transition ' +
@@ -244,7 +272,12 @@ export function AdminBroadcast() {
           {preset.needsMatch && (
             <div>
               <label className="label">
-                Jogo {preset.matchFilter === 'finished' ? '(já encerrado)' : '(próximos)'}
+                Jogo{' '}
+                {preset.matchFilter === 'finished'
+                  ? '(já encerrado)'
+                  : preset.matchFilter === 'live'
+                    ? '(em andamento)'
+                    : '(próximos)'}
               </label>
               <select
                 className="input w-full"
@@ -269,9 +302,43 @@ export function AdminBroadcast() {
             </div>
           )}
 
+          {preset.needsScore && (
+            <div>
+              <label className="label">Placar atual do jogo</label>
+              <div className="flex items-center gap-2">
+                <input
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  className="input w-16 text-center"
+                  placeholder="0"
+                  value={homeGoals}
+                  onChange={(e) => setHomeGoals(e.target.value.replace(/\D/g, '').slice(0, 2))}
+                  aria-label="Gols do mandante"
+                />
+                <span className="text-emerald-300/50 font-bold">×</span>
+                <input
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  className="input w-16 text-center"
+                  placeholder="0"
+                  value={awayGoals}
+                  onChange={(e) => setAwayGoals(e.target.value.replace(/\D/g, '').slice(0, 2))}
+                  aria-label="Gols do visitante"
+                />
+              </div>
+              <p className="text-[11px] text-emerald-200/50 mt-1">
+                Mostra quem está exatamente nesse placar agora. Atualize e dispare de novo conforme o
+                jogo muda.
+              </p>
+            </div>
+          )}
+
           <button
             className="btn-gold w-full text-sm"
-            disabled={previewMutation.isPending}
+            disabled={
+              previewMutation.isPending ||
+              (preset.needsScore && (homeGoals === '' || awayGoals === ''))
+            }
             onClick={() => previewMutation.mutate()}
           >
             {previewMutation.isPending ? 'Gerando...' : '✨ Gerar com IA'}

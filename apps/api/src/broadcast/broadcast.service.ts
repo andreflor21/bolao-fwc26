@@ -62,8 +62,12 @@ export class BroadcastService {
     private readonly whatsapp: WhatsappService,
   ) {}
 
-  async preview(presetKey: BroadcastPresetKey, matchId?: string): Promise<BroadcastPreviewResult> {
-    const context = await this.collectContext(presetKey, matchId);
+  async preview(
+    presetKey: BroadcastPresetKey,
+    matchId?: string,
+    liveScore?: { homeGoals: number; awayGoals: number },
+  ): Promise<BroadcastPreviewResult> {
+    const context = await this.collectContext(presetKey, matchId, liveScore);
     const draft = await this.ai.generate(presetKey, context);
     return {
       ...draft,
@@ -138,7 +142,11 @@ export class BroadcastService {
 
   // -------- Context collectors --------
 
-  private async collectContext(presetKey: BroadcastPresetKey, matchId?: string): Promise<unknown> {
+  private async collectContext(
+    presetKey: BroadcastPresetKey,
+    matchId?: string,
+    liveScore?: { homeGoals: number; awayGoals: number },
+  ): Promise<unknown> {
     switch (presetKey) {
       case 'top-guesses-today':
         return this.collectTopGuesses(matchId);
@@ -148,6 +156,11 @@ export class BroadcastService {
         return this.collectResultRecap(matchId);
       case 'reminder-lock-soon':
         return this.collectReminder();
+      case 'who-is-nailing':
+        if (!liveScore) {
+          throw new BadRequestException('Informe o placar atual do jogo (homeGoals e awayGoals).');
+        }
+        return this.collectWhoIsNailing(matchId, liveScore.homeGoals, liveScore.awayGoals);
       default:
         throw new BadRequestException(`Preset desconhecido: ${presetKey}`);
     }
@@ -194,7 +207,36 @@ export class BroadcastService {
       awayTeamName: match.awayTeam?.name ?? null,
       kickoffLabel: BRT_DATETIME.format(match.kickoffAt),
       totalGuesses: total,
-      topGuesses: distribution.slice(0, 5),
+      // Todos os placares palpitados, do mais escolhido pro menos (não só o top 5).
+      guesses: distribution,
+    };
+  }
+
+  /**
+   * "Quem está cravando o placar atual" — o admin informa o placar do jogo no
+   * momento do disparo e listamos os participantes cujo palpite bate exatamente
+   * com esse placar. Diferente dos outros presets, este cita nomes.
+   */
+  private async collectWhoIsNailing(matchId: string | undefined, homeGoals: number, awayGoals: number) {
+    const match = await this.resolveTargetMatch(matchId);
+    const guesses = await this.prisma.guess.findMany({
+      where: { matchId: match.id, homeGoals, awayGoals },
+      select: { user: { select: { name: true } } },
+    });
+    const nailers = guesses
+      .map((g) => g.user?.name?.trim())
+      .filter((n): n is string => Boolean(n))
+      .sort((a, b) => a.localeCompare(b, 'pt'));
+    return {
+      matchId: match.id,
+      homeTeamCode: match.homeTeam?.code ?? null,
+      awayTeamCode: match.awayTeam?.code ?? null,
+      homeTeamName: match.homeTeam?.name ?? null,
+      awayTeamName: match.awayTeam?.name ?? null,
+      homeGoals,
+      awayGoals,
+      nailers,
+      count: nailers.length,
     };
   }
 

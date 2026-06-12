@@ -25,7 +25,7 @@ describe('BroadcastAIService', () => {
     const result = await svc.generate('top-guesses-today', {
       homeTeamName: 'Brasil',
       awayTeamName: 'Argentina',
-      topGuesses: [
+      guesses: [
         { homeGoals: 2, awayGoals: 1, count: 12 },
         { homeGoals: 1, awayGoals: 0, count: 8 },
       ],
@@ -34,7 +34,25 @@ describe('BroadcastAIService', () => {
     expect(result.text).toContain('Brasil');
     expect(result.text).toContain('Argentina');
     expect(result.text).toContain('2x1');
-    expect(result.text).toContain('12 palpites');
+    expect(result.text).toContain('12 pessoas');
+    // Lista TODOS os placares, não só o top — o segundo também aparece.
+    expect(result.text).toContain('1x0');
+  });
+
+  it('template de "quem está cravando" lista os nomes do contexto', async () => {
+    const svc = new BroadcastAIService(configWith({}));
+    const result = await svc.generate('who-is-nailing', {
+      homeTeamName: 'Brasil',
+      awayTeamName: 'Argentina',
+      homeGoals: 2,
+      awayGoals: 1,
+      nailers: ['André', 'Maria'],
+      count: 2,
+    });
+    expect(result.source).toBe('template');
+    expect(result.text).toContain('André');
+    expect(result.text).toContain('Maria');
+    expect(result.text).toContain('2x1');
   });
 
   it('usa Claude quando há chave configurada e retorna text limpo', async () => {

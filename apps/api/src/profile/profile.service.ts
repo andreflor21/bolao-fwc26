@@ -1,8 +1,13 @@
 import { ForbiddenException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { CompetitionService } from '../competition/competition.service';
 import { REDIS_CLIENT } from '../redis/redis.tokens';
 import Redis from 'ioredis';
-import { FIFA_WC_2026_ID } from '@bolao/shared';
+import {
+  FIFA_WC_2026_ID,
+  type RankingEvolutionDto,
+  type EvolutionSeriesDto,
+} from '@bolao/shared';
 
 export interface ParticipantListItem {
   userId: string;
@@ -59,6 +64,8 @@ export interface ParticipantKnockoutGuess {
         awayGoals: number | null;
         advancesTeamCode: string | null;
         points: number | null;
+        teamPoints: number | null;
+        scorePoints: number | null;
       }
     | null;
 }
@@ -99,8 +106,18 @@ const KO_STAGE_ORDER: Record<string, number> = {
 export class ProfileService {
   constructor(
     private readonly prisma: PrismaService,
+    private readonly competition: CompetitionService,
     @Inject(REDIS_CLIENT) private readonly redis: Redis,
   ) {}
+
+  /**
+   * Trava geral da competição já passou? Depois dela, todos os palpites (de
+   * qualquer participante) ficam abertos — não tem mais o que esconder.
+   */
+  private async isCompetitionLocked(): Promise<boolean> {
+    const lockAt = await this.competition.getLockAt();
+    return new Date() >= lockAt;
+  }
 
   async listParticipants(): Promise<ParticipantListItem[]> {
     const subs = await this.prisma.subscription.findMany({
@@ -163,12 +180,14 @@ export class ProfileService {
     });
     const byMatch = new Map(guesses.map((g) => [g.matchId, g]));
     const now = new Date();
+    const competitionLocked = await this.isCompetitionLocked();
 
     return {
       header,
       matches: matches.map((m) => {
         const isLocked = m.kickoffAt <= now || m.resultLockedAt !== null;
-        const reveal = isSelf || isLocked;
+        // Após a trava geral, libera tudo; antes dela, só jogo travado ou o dono.
+        const reveal = isSelf || isLocked || competitionLocked;
         const g = byMatch.get(m.id);
         return {
           matchId: m.id,
@@ -230,9 +249,10 @@ export class ProfileService {
 
     const koScores = await this.prisma.knockoutGuessScore.findMany({
       where: { userId: targetUserId, competitionId: FIFA_WC_2026_ID },
-      select: { fixtureId: true, points: true },
+      select: { fixtureId: true, points: true, teamPoints: true, scorePoints: true },
     });
-    const pointsByFixture = new Map(koScores.map((s) => [s.fixtureId, s.points]));
+    const scoreByFixture = new Map(koScores.map((s) => [s.fixtureId, s]));
+    const competitionLocked = await this.isCompetitionLocked();
 
     if (!prediction) {
       // Sem palpite de mata-mata enviado — devolve só os fixtures travados
@@ -281,8 +301,10 @@ export class ProfileService {
     const fixtures: ParticipantKnockoutGuess[] = bracketFixtures.map((f) => {
       const m = matchByFixture.get(f.id);
       const isLocked = m ? m.kickoffAt <= now || m.resultLockedAt !== null : false;
-      const reveal = isSelf || isLocked;
+      // Após a trava geral, libera tudo; antes dela, só confronto travado ou o dono.
+      const reveal = isSelf || isLocked || competitionLocked;
       const scoreEntry = koScoresMap[f.id];
+      const koScore = scoreByFixture.get(f.id);
       return {
         fixtureId: f.id,
         stage: f.stage,
@@ -300,13 +322,149 @@ export class ProfileService {
               homeGoals: scoreEntry?.homeGoals ?? null,
               awayGoals: scoreEntry?.awayGoals ?? null,
               advancesTeamCode: scoreEntry?.advancesTeamCode ?? null,
-              points: pointsByFixture.get(f.id) ?? null,
+              points: koScore?.points ?? null,
+              teamPoints: koScore?.teamPoints ?? null,
+              scorePoints: koScore?.scorePoints ?? null,
             }
           : null,
       };
     });
     fixtures.sort(this.sortByStageThenFixture);
     return { header, fixtures, noPayload: false };
+  }
+
+  /**
+   * Evolução no ranking geral jogo a jogo. Reconstrói a curva a partir dos
+   * pontos materializados (`guess_scores` da fase de grupos + `knockout_guess_scores`
+   * do mata-mata) — a mesma soma que alimenta o ZSET do ranking geral. Cada
+   * checkpoint é um jogo já encerrado (resultado oficial), em ordem de kickoff.
+   *
+   * Para cada checkpoint expõe dois números por participante: pontos acumulados
+   * e posição no ranking (1 = topo) naquele instante. Devolve a série do alvo e,
+   * quando não for o próprio dono, também a do solicitante (a segunda linha).
+   */
+  async getRankingEvolution(
+    requesterId: string,
+    targetUserId: string,
+  ): Promise<RankingEvolutionDto> {
+    const header = await this.buildHeader(requesterId, targetUserId);
+    const isSelf = requesterId === targetUserId;
+
+    const [requester, activeSubs, allMatches, groupScores, koScores] =
+      await Promise.all([
+        this.prisma.user.findUnique({
+          where: { id: requesterId },
+          select: { name: true },
+        }),
+        this.prisma.subscription.findMany({
+          where: { competitionId: FIFA_WC_2026_ID, status: 'active' },
+          select: { userId: true },
+        }),
+        // Todos os jogos em ordem cronológica — o índice (1-based) é o "número
+        // do jogo" (1 a 104). Só os encerrados viram checkpoint da evolução.
+        this.prisma.match.findMany({
+          where: { competitionId: FIFA_WC_2026_ID },
+          orderBy: [{ kickoffAt: 'asc' }],
+          select: {
+            id: true,
+            bracketFixtureId: true,
+            kickoffAt: true,
+            homeGoalsOfficial: true,
+            awayGoalsOfficial: true,
+            homeTeam: { select: { code: true } },
+            awayTeam: { select: { code: true } },
+          },
+        }),
+        this.prisma.guessScore.findMany({
+          where: {
+            guess: { match: { competitionId: FIFA_WC_2026_ID, stage: 'group' } },
+          },
+          select: { points: true, guess: { select: { userId: true, matchId: true } } },
+        }),
+        this.prisma.knockoutGuessScore.findMany({
+          where: { competitionId: FIFA_WC_2026_ID },
+          select: { userId: true, fixtureId: true, points: true },
+        }),
+      ]);
+
+    const activeIds = new Set(activeSubs.map((s) => s.userId));
+    const totalPlayers = activeIds.size;
+
+    // Pontos por jogo: matchId -> (userId -> pontos) para grupos; o mata-mata é
+    // chaveado por fixtureId, então resolvemos via match.bracketFixtureId.
+    const groupByMatch = new Map<string, Map<string, number>>();
+    for (const s of groupScores) {
+      if (!activeIds.has(s.guess.userId)) continue;
+      const m = groupByMatch.get(s.guess.matchId) ?? new Map<string, number>();
+      m.set(s.guess.userId, (m.get(s.guess.userId) ?? 0) + s.points);
+      groupByMatch.set(s.guess.matchId, m);
+    }
+    const koByFixture = new Map<string, Map<string, number>>();
+    for (const s of koScores) {
+      if (!activeIds.has(s.userId)) continue;
+      const m = koByFixture.get(s.fixtureId) ?? new Map<string, number>();
+      m.set(s.userId, (m.get(s.userId) ?? 0) + s.points);
+      koByFixture.set(s.fixtureId, m);
+    }
+
+    const checkpoints: RankingEvolutionDto['checkpoints'] = [];
+    const targetSeries: EvolutionSeriesDto = { points: [], position: [] };
+    const selfSeries: EvolutionSeriesDto = { points: [], position: [] };
+
+    // Acumulado de todos os participantes ativos (inicia zerado), atualizado a
+    // cada jogo. A posição sai de uma varredura O(participantes) por checkpoint.
+    const cumulative = new Map<string, number>();
+    for (const id of activeIds) cumulative.set(id, 0);
+
+    const positionOf = (userId: string): number => {
+      const mine = cumulative.get(userId) ?? 0;
+      let ahead = 0;
+      for (const v of cumulative.values()) if (v > mine) ahead++;
+      return ahead + 1;
+    };
+
+    allMatches.forEach((match, idx) => {
+      // O número do jogo é a posição no calendário (1 a 104), independente de
+      // estar encerrado ou não — preserva a numeração oficial no eixo X.
+      const gameNumber = idx + 1;
+      const isSettled =
+        match.homeGoalsOfficial !== null && match.awayGoalsOfficial !== null;
+      if (!isSettled) return;
+
+      const perUser =
+        groupByMatch.get(match.id) ??
+        (match.bracketFixtureId ? koByFixture.get(match.bracketFixtureId) : undefined);
+      if (perUser) {
+        for (const [userId, pts] of perUser) {
+          cumulative.set(userId, (cumulative.get(userId) ?? 0) + pts);
+        }
+      }
+
+      const home = match.homeTeam?.code ?? '?';
+      const away = match.awayTeam?.code ?? match.bracketFixtureId ?? '?';
+      checkpoints.push({
+        gameNumber,
+        label: `${home}×${away}`,
+        kickoffAt: match.kickoffAt.toISOString(),
+      });
+
+      targetSeries.points.push(cumulative.get(targetUserId) ?? 0);
+      targetSeries.position.push(positionOf(targetUserId));
+      if (!isSelf) {
+        selfSeries.points.push(cumulative.get(requesterId) ?? 0);
+        selfSeries.position.push(positionOf(requesterId));
+      }
+    });
+
+    return {
+      checkpoints,
+      target: targetSeries,
+      self: isSelf ? null : selfSeries,
+      isSelf,
+      targetName: header.name,
+      selfName: requester?.name ?? 'Você',
+      totalPlayers,
+    };
   }
 
   private sortByStageThenFixture = (a: ParticipantKnockoutGuess, b: ParticipantKnockoutGuess) => {

@@ -6,7 +6,8 @@ export type BroadcastPresetKey =
   | 'top-guesses-today'
   | 'win-draw-probabilities'
   | 'match-result-recap'
-  | 'reminder-lock-soon';
+  | 'reminder-lock-soon'
+  | 'who-is-nailing';
 
 export interface BroadcastDraft {
   text: string;
@@ -14,42 +15,48 @@ export interface BroadcastDraft {
   source: 'claude' | 'template';
 }
 
-const SYSTEM_PROMPT = `Você é um narrador animado de um grupo de WhatsApp do bolão da Copa do Mundo FIFA 2026.
-Seu tom é descontraído, com gírias leves de torcida brasileira (sem ofensas, sem zoeira pesada, sem promessas, sem prêmios em dinheiro).
-Sua função é redigir UMA mensagem curta de 2 a 5 linhas para postar no grupo, baseada nos dados fornecidos.
-Regras inegociáveis:
-- Português do Brasil. Tom de voz amigável e empolgado.
-- Inclua 1–3 emojis pertinentes (⚽🇧🇷🏆📊🔥) — nunca exagere.
-- Nunca invente dados que não estão no contexto. Se um número está zerado, faça uma observação leve ("ninguém arriscou ainda 👀").
-- Nunca cite usuários específicos. Fale do coletivo ("a galera", "o pessoal").
-- Não inclua links nem hashtags.
-- Não comece com "Olá pessoal", "E aí galera" — vá direto ao assunto.
-- Devolva SOMENTE o texto da mensagem (sem aspas, sem markdown, sem prefixo).`;
+const SYSTEM_PROMPT = `Você é a pessoa que solta as mensagens no grupo de WhatsApp do bolão da Copa 2026. Escreve como gente de verdade mandando zap, não como robô narrador.
+Como escrever:
+- Português do Brasil, tom de bar/grupo de amigos. Pode usar gíria de torcida na medida (sem ofensa, sem zoeira pesada, sem prometer prêmio em dinheiro).
+- Mensagem curta: 1 a 4 linhas. Sem enrolação, sem introduçãozinha.
+- No máximo 1 ou 2 emojis, e só quando cair bem. Mensagem sem emoji nenhum também tá ótima.
+- Varie o jeito de começar. Nada de "E aí galera", "Olá pessoal", "Atenção:" nem frase de efeito genérica.
+- Não use travessão pra dar aquele ar de texto de IA; escreve direto.
+- Só use números e nomes que estão no contexto. Se algo veio zerado, comenta de leve ("ninguém arriscou ainda").
+- Pode citar nomes SE eles vierem no contexto (ex.: lista de quem cravou). Sem contexto, fala do coletivo ("a galera", "o pessoal").
+- Sem links, sem hashtag.
+- Responda SÓ com o texto da mensagem (sem aspas, sem markdown, sem rótulo).`;
 
 const PROMPTS: Record<BroadcastPresetKey, (ctx: unknown) => string> = {
-  'top-guesses-today': (ctx) => `Preset: palpites mais jogados para o jogo de hoje.
+  'top-guesses-today': (ctx) => `Os palpites do grupo pro próximo jogo.
 Dados (JSON):
 ${JSON.stringify(ctx, null, 2)}
 
-Monte uma mensagem destacando o confronto, listando os 3 placares mais palpitados pelo grupo (com a contagem de cada um) e provocando expectativa pro apito inicial.`,
+Escreva avisando qual é o confronto e listando TODOS os placares que foram palpitados, do mais escolhido pro menos, com quantas pessoas em cada um (o array vem em "guesses"). Pode usar uma linha por placar tipo "2x1 — 5 pessoas". Fecha com um gancho pro jogo. Mantém curto e natural.`,
 
-  'win-draw-probabilities': (ctx) => `Preset: probabilidades implícitas pelos palpites do grupo.
+  'win-draw-probabilities': (ctx) => `Como o grupo dividiu os palpites desse jogo (em %).
 Dados (JSON):
 ${JSON.stringify(ctx, null, 2)}
 
-Monte uma mensagem dizendo o que a galera está achando do jogo, com as três porcentagens (casa, empate, visitante) baseadas nos palpites do grupo. Comente brevemente quem é o "favorito da galera" se houver diferença clara.`,
+Escreva dizendo pra onde a galera tá pendendo, com as três porcentagens (casa, empate, visitante). Se uma se destaca, aponta o favorito do grupo numa frase. Nada de fórmula pronta.`,
 
-  'match-result-recap': (ctx) => `Preset: recap do resultado oficial recém-cadastrado.
+  'match-result-recap': (ctx) => `Resultado oficial que acabou de sair.
 Dados (JSON):
 ${JSON.stringify(ctx, null, 2)}
 
-Monte uma mensagem comemorando os "cravadores" (quem acertou o placar exato), citando a quantidade — sem nomes, só o número. Se ninguém cravou, dê o tom de "ninguém acertou esse aí".`,
+Escreva o fim de jogo com o placar e quantas pessoas cravaram o placar exato (só o número, sem nomes). Se ninguém cravou, brinca com isso. Curto e direto.`,
 
-  'reminder-lock-soon': (ctx) => `Preset: lembrete de jogos travando em breve.
+  'reminder-lock-soon': (ctx) => `Jogos travando nas próximas horas.
 Dados (JSON):
 ${JSON.stringify(ctx, null, 2)}
 
-Monte uma mensagem alertando que os palpites travam quando o jogo começa, listando 1–3 jogos das próximas horas e horário (BRT). Tom: amigável e urgente, sem desespero.`,
+Escreva lembrando que o palpite trava quando a bola rola, citando os jogos e os horários (BRT). Tom de "corre que vai fechar", sem ser dramático.`,
+
+  'who-is-nailing': (ctx) => `Quem está cravando o placar do jogo que tá rolando agora.
+Dados (JSON):
+${JSON.stringify(ctx, null, 2)}
+
+O admin passou o placar do momento. Escreve dizendo quais nomes (vêm em "nailers") estão exatamente nesse placar agora, citando os nomes. Se a lista vier vazia, comenta que ninguém tá nesse placar ainda. Lembra que ainda dá pra virar até o apito final. Curto e empolgado.`,
 };
 
 /**
@@ -107,11 +114,9 @@ export class BroadcastAIService {
     if (presetKey === 'top-guesses-today') {
       const home = String(c.homeTeamName ?? c.homeTeamCode ?? '?');
       const away = String(c.awayTeamName ?? c.awayTeamCode ?? '?');
-      const top = Array.isArray(c.topGuesses) ? (c.topGuesses as Array<{ homeGoals: number; awayGoals: number; count: number }>) : [];
-      const lines = top
-        .slice(0, 3)
-        .map((g, i) => `${i + 1}. ${g.homeGoals}x${g.awayGoals} — ${g.count} palpite${g.count !== 1 ? 's' : ''}`);
-      return `⚽ ${home} x ${away} hoje!\nPalpites mais jogados pelo grupo:\n${lines.join('\n') || '(nenhum palpite registrado)'}`;
+      const all = Array.isArray(c.guesses) ? (c.guesses as Array<{ homeGoals: number; awayGoals: number; count: number }>) : [];
+      const lines = all.map((g) => `${g.homeGoals}x${g.awayGoals} — ${g.count} ${g.count === 1 ? 'pessoa' : 'pessoas'}`);
+      return `Como o grupo palpitou ${home} x ${away}:\n${lines.join('\n') || 'Ninguém palpitou ainda.'}`;
     }
     if (presetKey === 'win-draw-probabilities') {
       const home = String(c.homeTeamName ?? c.homeTeamCode ?? 'Casa');
@@ -119,7 +124,7 @@ export class BroadcastAIService {
       const homePct = Math.round(Number(c.homeWinPct ?? 0));
       const drawPct = Math.round(Number(c.drawPct ?? 0));
       const awayPct = Math.round(Number(c.awayWinPct ?? 0));
-      return `📊 O grupo já palpitou para ${home} x ${away}:\n• Vitória ${home}: ${homePct}%\n• Empate: ${drawPct}%\n• Vitória ${away}: ${awayPct}%`;
+      return `Como o grupo vê ${home} x ${away}:\nVitória ${home}: ${homePct}%\nEmpate: ${drawPct}%\nVitória ${away}: ${awayPct}%`;
     }
     if (presetKey === 'match-result-recap') {
       const home = String(c.homeTeamName ?? c.homeTeamCode ?? '?');
@@ -127,11 +132,22 @@ export class BroadcastAIService {
       const hg = c.homeGoalsOfficial;
       const ag = c.awayGoalsOfficial;
       const exact = Number(c.exactScoreCount ?? 0);
-      return `🏆 Fim de jogo: ${home} ${hg}x${ag} ${away}\n${exact > 0 ? `${exact} pessoa(s) cravaram o placar exato!` : 'Ninguém cravou o placar exato dessa vez.'}`;
+      return `Deu ${home} ${hg}x${ag} ${away}.\n${exact > 0 ? `${exact} ${exact === 1 ? 'pessoa cravou' : 'pessoas cravaram'} o placar exato.` : 'Dessa vez ninguém cravou o placar.'}`;
+    }
+    if (presetKey === 'who-is-nailing') {
+      const home = String(c.homeTeamName ?? c.homeTeamCode ?? '?');
+      const away = String(c.awayTeamName ?? c.awayTeamCode ?? '?');
+      const hg = c.homeGoals;
+      const ag = c.awayGoals;
+      const nailers = Array.isArray(c.nailers) ? (c.nailers as string[]) : [];
+      if (nailers.length === 0) {
+        return `Tá ${home} ${hg}x${ag} ${away} e ninguém tá cravando esse placar agora. Bora ver se vira até o fim.`;
+      }
+      return `Como tá agora, ${home} ${hg}x${ag} ${away}, quem tá cravando: ${nailers.join(', ')}. Ainda dá tempo de mudar tudo até o apito final.`;
     }
     // reminder-lock-soon
     const fixtures = Array.isArray(c.fixtures) ? (c.fixtures as Array<{ label: string; kickoffLabel: string }>) : [];
-    const lines = fixtures.slice(0, 3).map((f) => `• ${f.label} — ${f.kickoffLabel}`);
-    return `⏰ Última chance pra palpitar:\n${lines.join('\n') || '(nenhum jogo nas próximas horas)'}`;
+    const lines = fixtures.slice(0, 3).map((f) => `${f.label} — ${f.kickoffLabel}`);
+    return `Os palpites travam quando a bola rolar:\n${lines.join('\n') || 'Nenhum jogo nas próximas horas.'}`;
   }
 }
