@@ -8,3 +8,4 @@ export * from './auth';
 export * from './bracket';
 export * from './guess';
 export * from './ranking';
+export * from './profile';

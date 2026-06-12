@@ -82,6 +82,8 @@ model User {
   knockoutScores    KnockoutGuessScore[]
   broadcastsSent     BroadcastLog[] @relation("BroadcastSent")
   broadcastsReceived BroadcastLog[] @relation("BroadcastTarget")
+  sidePoolInvitesReceived SidePoolInvite[] @relation("SidePoolInviteInvitee")
+  sidePoolInvitesSent     SidePoolInvite[] @relation("SidePoolInviteInviter")
 
   @@index([createdAt])
   @@map("users")
@@ -230,10 +232,33 @@ model SidePool {
   owner       User             @relation("SidePoolOwner", fields: [ownerUserId], references: [id], onDelete: Cascade)
   competition Competition      @relation(fields: [competitionId], references: [id], onDelete: Cascade)
   members     SidePoolMember[]
+  invites     SidePoolInvite[]
 
   @@index([ownerUserId])
   @@index([competitionId])
   @@map("side_pools")
+}
+
+/**
+ * Convite individual para um bolão paralelo. Qualquer membro do bolão pode
+ * convidar outro participante (não só o dono). Uma linha = um convite pendente;
+ * ao aceitar vira SidePoolMember e a linha é removida; ao recusar, removida.
+ */
+model SidePoolInvite {
+  id              String   @id @default(uuid()) @db.Uuid
+  sidePoolId      String   @map("side_pool_id") @db.Uuid
+  inviteeUserId   String   @map("invitee_user_id") @db.Uuid
+  invitedByUserId String   @map("invited_by_user_id") @db.Uuid
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  sidePool  SidePool @relation(fields: [sidePoolId], references: [id], onDelete: Cascade)
+  invitee   User     @relation("SidePoolInviteInvitee", fields: [inviteeUserId], references: [id], onDelete: Cascade)
+  invitedBy User     @relation("SidePoolInviteInviter", fields: [invitedByUserId], references: [id], onDelete: Cascade)
+
+  @@unique([sidePoolId, inviteeUserId])
+  @@index([inviteeUserId])
+  @@index([sidePoolId])
+  @@map("side_pool_invites")
 }
 
 model SidePoolMember {

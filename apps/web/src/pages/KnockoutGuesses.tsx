@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError } from '../lib/api';
 import { flagUrl } from '../lib/flags';
+import { knockoutRuleLabel } from '@bolao/shared';
 import type {
   BracketFixtureDto,
   KnockoutFixtureScoreDto,
@@ -528,14 +529,14 @@ function KnockoutFixtureCard({
             {score && (
               <span
                 className={
-                  'inline-flex items-center rounded-full px-2 py-0.5 text-xs font-bold ' +
+                  'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-bold ' +
                   (score.points > 0
                     ? 'bg-gold-400/15 text-gold-200 border border-gold-400/30'
                     : 'bg-midnight-800 text-emerald-200/60 border border-emerald-500/20')
                 }
                 title={`${score.teamPoints} pts de times + ${score.scorePoints} de placar`}
               >
-                +{score.points} pts
+                +{score.points} pts · {knockoutRuleLabel(score.teamPoints, score.scorePoints)}
               </span>
             )}
           </div>

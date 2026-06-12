@@ -46,13 +46,14 @@ describe('computeBreakdown', () => {
     );
     const first = view.prizes.find((p) => p.category === 'first');
     expect(first?.currentLeaders.map((l) => l.userId)).toEqual(['u1', 'u2', 'u3']);
-    // After the 3-way tie at 1st, positions 2-3 are consumed; next prize awarded is 4th.
+    // Dense ranking: the 3-way tie shares 1st; the next points group takes 2nd
+    // (no skipped slots), so positions fill consecutively up to 5th.
     const second = view.prizes.find((p) => p.category === 'second');
-    expect(second?.currentLeaders).toEqual([]);
+    expect(second?.currentLeaders.map((l) => l.userId)).toEqual(['u4', 'u5']);
     const third = view.prizes.find((p) => p.category === 'third');
     expect(third?.currentLeaders).toEqual([]);
     const fourth = view.prizes.find((p) => p.category === 'fourth');
-    expect(fourth?.currentLeaders.map((l) => l.userId)).toEqual(['u4', 'u5']);
+    expect(fourth?.currentLeaders).toEqual([]);
   });
 
   it('exact score king leader is the user with the most exact scores', () => {
@@ -96,19 +97,30 @@ describe('finalize', () => {
     expect(payouts.reduce((s, p) => s + p.amountCents, 0)).toBe(100 * AMOUNT);
   });
 
-  it('splits the 1st prize equally on a triple tie at 1st; skips 2nd and 3rd', () => {
+  it('splits the 1st prize on a triple tie, then awards 2nd onward to the next groups (dense)', () => {
     const payouts = finalize(100, AMOUNT, makeRanking([100, 100, 100, 80, 70, 60]), []);
     const first = payouts.filter((p) => p.category === 'first');
     expect(first).toHaveLength(3);
     // 100 × 5000 × 0.45 = 225000; split among 3 → 75000 each.
     expect(first.every((p) => p.amountCents === 75000)).toBe(true);
     expect(first.map((p) => p.userId).sort()).toEqual(['u1', 'u2', 'u3']);
+    // Dense ranking: no skipped slots — next groups take 2nd, 3rd, 4th in order.
+    expect(payouts.find((p) => p.category === 'second')?.userId).toBe('u4');
+    expect(payouts.find((p) => p.category === 'third')?.userId).toBe('u5');
+    expect(payouts.find((p) => p.category === 'fourth')?.userId).toBe('u6');
+    // Only 4 distinct points groups exist, so 5th has no recipient.
+    expect(payouts.some((p) => p.category === 'fifth')).toBe(false);
+  });
+
+  it('splits the 1st prize among ALL tied players, however many (10-way tie)', () => {
+    const payouts = finalize(100, AMOUNT, makeRanking(Array(10).fill(100)), []);
+    const first = payouts.filter((p) => p.category === 'first');
+    expect(first).toHaveLength(10);
+    // 100 × 5000 × 0.45 = 225000; split among 10 → 22500 each.
+    expect(first.every((p) => p.amountCents === 22500)).toBe(true);
+    expect(first.reduce((s, p) => s + p.amountCents, 0)).toBe(225000);
+    // Everyone is in the single tie group, so no one is left to take 2nd.
     expect(payouts.some((p) => p.category === 'second')).toBe(false);
-    expect(payouts.some((p) => p.category === 'third')).toBe(false);
-    const fourth = payouts.find((p) => p.category === 'fourth');
-    expect(fourth?.userId).toBe('u4');
-    const fifth = payouts.find((p) => p.category === 'fifth');
-    expect(fifth?.userId).toBe('u5');
   });
 
   it('handles a tie at 1st with residual cent (splits 100 cents among 3 ⇒ 34/33/33)', () => {

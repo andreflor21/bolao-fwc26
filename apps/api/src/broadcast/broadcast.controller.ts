@@ -31,7 +31,11 @@ export class BroadcastController {
   @Post('preview')
   @HttpCode(HttpStatus.OK)
   preview(@Body() body: PreviewBroadcastBody) {
-    return this.broadcast.preview(body.presetKey, body.matchId);
+    const liveScore =
+      body.homeGoals != null && body.awayGoals != null
+        ? { homeGoals: body.homeGoals, awayGoals: body.awayGoals }
+        : undefined;
+    return this.broadcast.preview(body.presetKey, body.matchId, liveScore);
   }
 
   /** Dispara a mensagem (texto já editado pelo admin) no grupo configurado. */
