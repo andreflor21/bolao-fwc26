@@ -45,4 +45,30 @@ describe('CompetitionService — trava geral (1h antes do 1º jogo)', () => {
     await expect(svc.assertOpen()).rejects.toBeInstanceOf(ForbiddenException);
     await expect(svc.assertKnockoutOpen()).rejects.toBeInstanceOf(ForbiddenException);
   });
+
+  describe('isLocked() — versão booleana usada para revelar palpites', () => {
+    it('travada quando encerrada cedo, mesmo com horário no futuro', async () => {
+      const svc = makeService(
+        { locksAt: new Date('2099-01-01T00:00:00Z'), closureStatus: 'finalized' },
+        new Date(),
+      );
+      await expect(svc.isLocked()).resolves.toBe(true);
+    });
+
+    it('aberta quando ainda "open" e o horário da trava está no futuro', async () => {
+      const svc = makeService(
+        { locksAt: new Date('2099-01-01T00:00:00Z'), closureStatus: 'open' },
+        new Date(),
+      );
+      await expect(svc.isLocked()).resolves.toBe(false);
+    });
+
+    it('travada quando "open" mas o horário da trava já passou', async () => {
+      const svc = makeService(
+        { locksAt: new Date('2020-01-01T00:00:00Z'), closureStatus: 'open' },
+        new Date(),
+      );
+      await expect(svc.isLocked()).resolves.toBe(true);
+    });
+  });
 });

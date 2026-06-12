@@ -111,12 +111,12 @@ export class ProfileService {
   ) {}
 
   /**
-   * Trava geral da competição já passou? Depois dela, todos os palpites (de
-   * qualquer participante) ficam abertos — não tem mais o que esconder.
+   * Trava geral já bateu (competição encerrada OU passou do horário)? Depois
+   * dela, todos os palpites (grupo e mata-mata, de qualquer participante) ficam
+   * abertos — não tem mais o que esconder.
    */
   private async isCompetitionLocked(): Promise<boolean> {
-    const lockAt = await this.competition.getLockAt();
-    return new Date() >= lockAt;
+    return this.competition.isLocked();
   }
 
   async listParticipants(): Promise<ParticipantListItem[]> {

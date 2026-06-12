@@ -42,6 +42,19 @@ export class CompetitionService {
   }
 
   /**
+   * Versão booleana da TRAVA GERAL — mesma condição do `assertWithinLockWindow`:
+   * travado se a competição foi encerrada (closureStatus != 'open') OU se já
+   * passou da trava de horário (1h antes do primeiro jogo). Usado para revelar
+   * os palpites (grupo e mata-mata) de todos os participantes depois da trava.
+   */
+  async isLocked(): Promise<boolean> {
+    const competition = await this.getMain();
+    if (competition.closureStatus !== 'open') return true;
+    const lockAt = new Date(competition.locksAt.getTime() - LOCK_LEAD_MS);
+    return new Date() >= lockAt;
+  }
+
+  /**
    * Garante que os palpites ainda estão abertos contra a TRAVA GERAL. Usa o
    * relógio do banco (NOW()) em vez do relógio da aplicação para eliminar drift
    * entre réplicas da API. Lança 403 LOCKED_COMPETITION após a trava ou se a

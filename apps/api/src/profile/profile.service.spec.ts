@@ -53,10 +53,10 @@ function buildPrisma(opts: {
   } as never;
 }
 
-/** Trava geral mockada — por padrão no futuro (competição ainda não travada). */
-function buildCompetition(lockAt: Date = new Date(Date.now() + 24 * 60 * 60 * 1000)) {
+/** Trava geral mockada — por padrão destravada (competição ainda aberta). */
+function buildCompetition(locked = false) {
   return {
-    getLockAt: jest.fn(async () => lockAt),
+    isLocked: jest.fn(async () => locked),
   } as never;
 }
 
@@ -149,8 +149,8 @@ describe('ProfileService.getGroupGuesses — lock visibility', () => {
       targetSub: { status: 'active' },
     });
     const redis = buildRedis({ 'zscore:target': 10, 'bolao:exact:target': 1 });
-    // Trava geral no passado → competição travada → tudo aberto.
-    const lockedComp = buildCompetition(new Date(Date.now() - 60 * 60 * 1000));
+    // Competição travada → tudo aberto.
+    const lockedComp = buildCompetition(true);
     const svc = new ProfileService(prisma, lockedComp, redis);
 
     const res = await svc.getGroupGuesses('requester', 'target');
