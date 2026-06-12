@@ -7,6 +7,7 @@ import { flagUrl } from '../lib/flags';
 import type {
   BracketPreviewDto,
   GroupLetter,
+  GroupStandingDto,
   KnockoutStage,
   MyKnockoutGuessesDto,
 } from '@bolao/shared';
@@ -71,11 +72,11 @@ export function BracketPreview() {
   const thirdPlace = bracket.fixtures.find((f) => f.id === 'TP-103')?.predictedWinnerCode;
   const koScores = koQuery.data?.scores ?? {};
   const officialResults = bracket.official?.results ?? {};
-  // Quando há resultados oficiais, mostra as classificações REAIS dos grupos
-  // (e os 8 melhores 3º reais) em vez das previstas pelos palpites.
+  // Quando há resultados oficiais, mostramos a classificação que o jogador
+  // palpitou LADO A LADO com a classificação real de cada grupo. Os 8 melhores
+  // 3º passam a exibir o resultado oficial quando disponível.
   const hasOfficialGroups =
     bracket.official && Object.keys(bracket.official.groups).length > 0;
-  const displayGroups = hasOfficialGroups ? bracket.official!.groups : bracket.groups;
   const displayThirds =
     hasOfficialGroups && bracket.official!.bestThirds.length > 0
       ? bracket.official!.bestThirds
@@ -127,60 +128,51 @@ export function BracketPreview() {
           Classificações dos grupos
           {hasOfficialGroups && (
             <span className="ml-2 text-xs font-normal text-gold-300/80 tracking-normal">
-              · resultado oficial
+              · seu palpite × resultado real
             </span>
           )}
         </h2>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {Object.entries(displayGroups).map(([letter, standings]) => (
-            <div key={letter} className="rounded-xl border border-emerald-500/15 bg-midnight-900/60 p-3">
-              <p className="text-[10px] tracking-[0.3em] text-gold-300/80 mb-2">GRUPO {letter}</p>
-              <table className="w-full text-xs">
-                <thead className="text-emerald-300/50">
-                  <tr>
-                    <th className="text-left font-medium pb-1">#</th>
-                    <th className="text-left font-medium pb-1">Time</th>
-                    <th className="text-right font-medium pb-1">P</th>
-                    <th className="text-right font-medium pb-1">SG</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {standings.map((s) => {
-                    const url = flagUrl(s.teamCode);
-                    return (
-                      <tr
-                        key={s.teamCode}
-                        className={
-                          s.position <= 2
-                            ? 'text-gold-200 font-semibold'
-                            : s.position === 3
-                            ? 'text-emerald-100'
-                            : 'text-emerald-200/60'
-                        }
-                      >
-                        <td>{s.position}</td>
-                        <td>
-                          <span className="flex items-center gap-1.5">
-                            {url && (
-                              <img
-                                src={url}
-                                alt=""
-                                loading="lazy"
-                                className="w-4 h-3 object-cover rounded-[2px] ring-1 ring-black/20"
-                              />
-                            )}
-                            {s.teamCode}
-                          </span>
-                        </td>
-                        <td className="text-right">{s.points}</td>
-                        <td className="text-right">{s.goalDifference >= 0 ? `+${s.goalDifference}` : s.goalDifference}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          ))}
+        <div
+          className={
+            'grid gap-3 ' +
+            (hasOfficialGroups ? 'sm:grid-cols-1 lg:grid-cols-2' : 'sm:grid-cols-2 lg:grid-cols-3')
+          }
+        >
+          {Object.entries(bracket.groups).map(([letter, predicted]) => {
+            const official = bracket.official?.groups[letter as GroupLetter];
+            const officialPositions = official
+              ? Object.fromEntries(official.map((s) => [s.teamCode, s.position]))
+              : undefined;
+            return (
+              <div
+                key={letter}
+                className="rounded-xl border border-emerald-500/15 bg-midnight-900/60 p-3"
+              >
+                <p className="text-[10px] tracking-[0.3em] text-gold-300/80 mb-2">GRUPO {letter}</p>
+                {official ? (
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <p className="text-[9px] uppercase tracking-[0.2em] text-emerald-300/60 mb-1">
+                        Seu palpite
+                      </p>
+                      <GroupStandingsTable
+                        standings={predicted}
+                        officialPositions={officialPositions}
+                      />
+                    </div>
+                    <div>
+                      <p className="text-[9px] uppercase tracking-[0.2em] text-gold-300/70 mb-1">
+                        Resultado real
+                      </p>
+                      <GroupStandingsTable standings={official} />
+                    </div>
+                  </div>
+                ) : (
+                  <GroupStandingsTable standings={predicted} />
+                )}
+              </div>
+            );
+          })}
         </div>
       </section>
 
@@ -246,5 +238,72 @@ export function BracketPreview() {
         </div>
       </section>
     </div>
+  );
+}
+
+/**
+ * Tabela compacta de classificação de um grupo. Quando `officialPositions` é
+ * fornecido (tabela de palpite ao lado do resultado real), marca com ✓ os times
+ * que o jogador acertou exatamente a posição.
+ */
+function GroupStandingsTable({
+  standings,
+  officialPositions,
+}: {
+  standings: GroupStandingDto[];
+  officialPositions?: Record<string, number>;
+}) {
+  return (
+    <table className="w-full text-xs">
+      <thead className="text-emerald-300/50">
+        <tr>
+          <th className="text-left font-medium pb-1">#</th>
+          <th className="text-left font-medium pb-1">Time</th>
+          <th className="text-right font-medium pb-1">P</th>
+          <th className="text-right font-medium pb-1">SG</th>
+        </tr>
+      </thead>
+      <tbody>
+        {standings.map((s) => {
+          const url = flagUrl(s.teamCode);
+          const correct =
+            officialPositions !== undefined && officialPositions[s.teamCode] === s.position;
+          return (
+            <tr
+              key={s.teamCode}
+              className={
+                s.position <= 2
+                  ? 'text-gold-200 font-semibold'
+                  : s.position === 3
+                  ? 'text-emerald-100'
+                  : 'text-emerald-200/60'
+              }
+            >
+              <td className="whitespace-nowrap">
+                {s.position}
+                {correct && <span className="text-emerald-400 ml-0.5">✓</span>}
+              </td>
+              <td>
+                <span className="flex items-center gap-1.5">
+                  {url && (
+                    <img
+                      src={url}
+                      alt=""
+                      loading="lazy"
+                      className="w-4 h-3 object-cover rounded-[2px] ring-1 ring-black/20"
+                    />
+                  )}
+                  {s.teamCode}
+                </span>
+              </td>
+              <td className="text-right">{s.points}</td>
+              <td className="text-right">
+                {s.goalDifference >= 0 ? `+${s.goalDifference}` : s.goalDifference}
+              </td>
+            </tr>
+          );
+        })}
+      </tbody>
+    </table>
   );
 }
