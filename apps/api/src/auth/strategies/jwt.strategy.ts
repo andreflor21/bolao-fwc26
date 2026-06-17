@@ -15,6 +15,7 @@ export interface AuthenticatedUser {
   email: string;
   role: string;
   name: string;
+  pixKey: string | null;
 }
 
 @Injectable()
@@ -30,7 +31,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   async validate(payload: JwtPayload): Promise<AuthenticatedUser> {
     const user = await this.prisma.user.findUnique({
       where: { id: payload.sub },
-      select: { id: true, email: true, role: true, name: true },
+      select: { id: true, email: true, role: true, name: true, pixKey: true },
     });
     if (!user) {
       throw new UnauthorizedException('User no longer exists');

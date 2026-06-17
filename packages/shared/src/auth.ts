@@ -5,6 +5,7 @@ export interface UserDto {
   email: string;
   name: string;
   role: UserRole;
+  pixKey: string | null;
   emailVerifiedAt: string | null;
   createdAt: string;
 }

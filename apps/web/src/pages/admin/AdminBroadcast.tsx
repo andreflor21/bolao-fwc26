@@ -127,8 +127,15 @@ export function AdminBroadcast() {
     const all = matchesQuery.data ?? [];
     const now = new Date();
     if (preset.matchFilter === 'upcoming') {
+      // Mantém o jogo selecionável até 45 min após o kickoff (jogo em
+      // andamento ainda vale como "próximo" pra esses presets).
+      const GRACE_MS = 45 * 60 * 1000;
       return all
-        .filter((m) => new Date(m.kickoffAt) >= now && m.homeGoalsOfficial === null)
+        .filter(
+          (m) =>
+            new Date(m.kickoffAt).getTime() + GRACE_MS >= now.getTime() &&
+            m.homeGoalsOfficial === null,
+        )
         .slice(0, 30);
     }
     if (preset.matchFilter === 'finished') {
