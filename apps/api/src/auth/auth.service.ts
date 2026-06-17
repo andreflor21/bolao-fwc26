@@ -9,6 +9,7 @@ import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'node:crypto';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { EmailService } from '../email/email.service';
 import type { RegisterDto } from './dto/register.dto';
@@ -62,17 +63,27 @@ export class AuthService {
     }
     const passwordHash = await bcrypt.hash(dto.password, this.bcryptCost);
 
-    const user = await this.prisma.user.create({
-      data: {
-        email: dto.email,
-        passwordHash,
-        name: dto.name.trim(),
-        role: 'player',
-        whatsapp: dto.whatsapp?.trim() || null,
-        whatsappGroupOptIn: dto.whatsappGroupOptIn ?? false,
-      },
-      select: { id: true, email: true, name: true, role: true, createdAt: true },
-    });
+    let user;
+    try {
+      user = await this.prisma.user.create({
+        data: {
+          email: dto.email,
+          passwordHash,
+          name: dto.name.trim(),
+          role: 'player',
+          whatsapp: dto.whatsapp?.trim() || null,
+          whatsappGroupOptIn: dto.whatsappGroupOptIn ?? false,
+        },
+        select: { id: true, email: true, name: true, role: true, pixKey: true, createdAt: true },
+      });
+    } catch (err) {
+      // Corrida: dois registros simultâneos passam pelo findUnique acima e
+      // batem na constraint UNIQUE do banco. Mapeia para o 409 amigável.
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+        throw new ConflictException('Email already registered');
+      }
+      throw err;
+    }
 
     await this.email.sendWelcome(user.email, user.name).catch((err) => {
       this.logger.warn(`Failed to send welcome email: ${err.message}`);
@@ -98,6 +109,7 @@ export class AuthService {
         email: user.email,
         name: user.name,
         role: user.role,
+        pixKey: user.pixKey,
         createdAt: user.createdAt,
       },
       tokens,
@@ -170,6 +182,41 @@ export class AuthService {
         data: { revokedAt: new Date() },
       }),
     ]);
+  }
+
+  async changePassword(
+    userId: string,
+    currentPassword: string,
+    newPassword: string,
+  ): Promise<void> {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) {
+      throw new UnauthorizedException('User no longer exists');
+    }
+    const ok = await bcrypt.compare(currentPassword, user.passwordHash);
+    if (!ok) {
+      throw new UnauthorizedException('Senha atual incorreta');
+    }
+    const passwordHash = await bcrypt.hash(newPassword, this.bcryptCost);
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { passwordHash },
+    });
+  }
+
+  async updateProfile(userId: string, data: { pixKey?: string | null }) {
+    return this.prisma.user.update({
+      where: { id: userId },
+      data: { pixKey: data.pixKey },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        role: true,
+        pixKey: true,
+        createdAt: true,
+      },
+    });
   }
 
   private async issueTokens(user: { id: string; email: string; role: string }) {

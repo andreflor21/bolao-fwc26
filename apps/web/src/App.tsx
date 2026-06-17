@@ -18,6 +18,7 @@ import { PaymentPix } from './pages/PaymentPix';
 import { Ranking } from './pages/Ranking';
 import { Participants } from './pages/Participants';
 import { ParticipantProfile } from './pages/ParticipantProfile';
+import { AccountSettings } from './pages/AccountSettings';
 import { Prizes } from './pages/Prizes';
 import { Privacy } from './pages/Privacy';
 import { Terms } from './pages/Terms';
@@ -54,6 +55,14 @@ export function App() {
           element={
             <ProtectedRoute>
               <Dashboard />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/configuracoes"
+          element={
+            <ProtectedRoute>
+              <AccountSettings />
             </ProtectedRoute>
           }
         />

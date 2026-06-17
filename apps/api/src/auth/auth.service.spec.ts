@@ -130,4 +130,43 @@ describe('AuthService', () => {
     expect(email.sendPasswordReset).not.toHaveBeenCalled();
     expect(prisma.passwordReset.create).not.toHaveBeenCalled();
   });
+
+  it('rejects changePassword when the current password is wrong', async () => {
+    const hash = await bcrypt.hash('correct', 4);
+    (prisma.user.findUnique as jest.Mock).mockResolvedValue({ id: 'u1', passwordHash: hash });
+    await expect(
+      service.changePassword('u1', 'wrong', 'newsecret123'),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
+    expect(prisma.user.update).not.toHaveBeenCalled();
+  });
+
+  it('changes the password when the current password matches', async () => {
+    const hash = await bcrypt.hash('correct', 4);
+    (prisma.user.findUnique as jest.Mock).mockResolvedValue({ id: 'u1', passwordHash: hash });
+    (prisma.user.update as jest.Mock).mockResolvedValue({ id: 'u1' });
+
+    await service.changePassword('u1', 'correct', 'newsecret123');
+
+    const updated = (prisma.user.update as jest.Mock).mock.calls[0][0];
+    expect(updated.where).toEqual({ id: 'u1' });
+    expect(await bcrypt.compare('newsecret123', updated.data.passwordHash)).toBe(true);
+  });
+
+  it('updates the pix key via updateProfile', async () => {
+    (prisma.user.update as jest.Mock).mockResolvedValue({
+      id: 'u1',
+      email: 'a@b.com',
+      name: 'Ana',
+      role: 'player',
+      pixKey: 'a@b.com',
+      createdAt: new Date(),
+    });
+
+    const out = await service.updateProfile('u1', { pixKey: 'a@b.com' });
+
+    expect(prisma.user.update).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: 'u1' }, data: { pixKey: 'a@b.com' } }),
+    );
+    expect(out.pixKey).toBe('a@b.com');
+  });
 });

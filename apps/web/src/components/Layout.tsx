@@ -62,14 +62,18 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 <div className="pl-2 ml-1 border-l border-emerald-500/20 flex items-center gap-2">
                   <AdminToggle />
                 </div>
-                <div className="flex items-center gap-2 pl-3 ml-1 border-l border-emerald-500/20">
+                <Link
+                  to="/configuracoes"
+                  className="flex items-center gap-2 pl-3 ml-1 border-l border-emerald-500/20 rounded-lg pr-2 py-1 hover:bg-emerald-500/10 transition"
+                  title="Configurações da conta"
+                >
                   <div className="h-8 w-8 rounded-full bg-gradient-to-br from-gold-300 to-gold-600 grid place-items-center text-midnight-900 font-bold text-sm shadow-md">
                     {user.name.charAt(0).toUpperCase()}
                   </div>
                   <span className="text-emerald-100 text-sm font-medium">
                     {user.name.split(' ')[0]}
                   </span>
-                </div>
+                </Link>
                 <button className="btn-secondary text-xs ml-1" onClick={doLogout}>
                   Sair
                 </button>
@@ -120,12 +124,19 @@ export function Layout({ children }: { children: React.ReactNode }) {
         {/* Drawer mobile */}
         {user && menuOpen && (
           <nav className="lg:hidden border-t border-emerald-500/15 bg-midnight-900/95 backdrop-blur-xl px-4 py-3 flex flex-col gap-1">
-            <div className="flex items-center gap-3 pb-3 mb-2 border-b border-emerald-500/15">
+            <Link
+              to="/configuracoes"
+              onClick={closeMenu}
+              className="flex items-center gap-3 pb-3 mb-2 border-b border-emerald-500/15 hover:opacity-80 transition"
+            >
               <div className="h-9 w-9 rounded-full bg-gradient-to-br from-gold-300 to-gold-600 grid place-items-center text-midnight-900 font-bold shadow-md">
                 {user.name.charAt(0).toUpperCase()}
               </div>
-              <span className="text-emerald-100 font-medium">{user.name.split(' ')[0]}</span>
-            </div>
+              <div className="leading-tight">
+                <span className="block text-emerald-100 font-medium">{user.name.split(' ')[0]}</span>
+                <span className="block text-xs text-emerald-300/70">Configurações</span>
+              </div>
+            </Link>
             {NAV_LINKS.map((l) => (
               <Link key={l.to} to={l.to} onClick={closeMenu} className={`${navLinkClass} text-base`}>
                 {l.label}
