@@ -13,10 +13,14 @@ import {
   DEFAULT_SIDE_POOL_MAX_MEMBERS,
 } from '@bolao/shared';
 import type { CreateSidePoolDto } from './dto/create-side-pool.dto';
+import { RankingService } from '../ranking/ranking.service';
 
 @Injectable()
 export class SidePoolService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly ranking: RankingService,
+  ) {}
 
   async create(userId: string, dto: CreateSidePoolDto) {
     const ownedCount = await this.prisma.sidePool.count({
@@ -42,6 +46,8 @@ export class SidePoolService {
         },
       },
     });
+    // Carrega a pontuação atual do dono no ZSET do novo bolão.
+    await this.ranking.recomputeForUser(userId);
     return this.toDto(sidePool.id);
   }
 
@@ -131,6 +137,8 @@ export class SidePoolService {
     await this.prisma.sidePoolMember.create({
       data: { sidePoolId: sidePool.id, userId },
     });
+    // Carrega a pontuação atual do jogador no ZSET deste bolão.
+    await this.ranking.recomputeForUser(userId);
     return { sidePoolId: sidePool.id, alreadyMember: false };
   }
 
@@ -237,6 +245,8 @@ export class SidePoolService {
       }),
       this.prisma.sidePoolInvite.delete({ where: { id: inviteId } }),
     ]);
+    // Carrega a pontuação atual do jogador no ZSET deste bolão.
+    await this.ranking.recomputeForUser(userId);
     return { sidePoolId: invite.sidePoolId, alreadyMember: false };
   }
 

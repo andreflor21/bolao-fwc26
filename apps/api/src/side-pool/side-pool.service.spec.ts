@@ -29,11 +29,16 @@ function buildPrisma(overrides: Record<string, unknown> = {}) {
   return { ...base, ...overrides } as never;
 }
 
+/** RankingService stub: só precisamos que recomputeForUser exista. */
+function buildRanking() {
+  return { recomputeForUser: jest.fn(async () => {}) } as never;
+}
+
 const POOL = { id: 'pool-1', maxMembers: 10, _count: { members: 3 } };
 
 describe('SidePoolService — convites', () => {
   it('rejeita convidar a si mesmo', async () => {
-    const svc = new SidePoolService(buildPrisma());
+    const svc = new SidePoolService(buildPrisma(), buildRanking());
     await expect(svc.invite('me', 'pool-1', 'me')).rejects.toThrow(BadRequestException);
   });
 
@@ -46,7 +51,7 @@ describe('SidePoolService — convites', () => {
         create: jest.fn(),
       },
     });
-    const svc = new SidePoolService(prisma);
+    const svc = new SidePoolService(prisma, buildRanking());
     await expect(svc.invite('me', 'pool-1', 'target')).rejects.toThrow(ForbiddenException);
   });
 
@@ -62,7 +67,7 @@ describe('SidePoolService — convites', () => {
       },
       subscription: { findUnique: jest.fn(async () => ({ status: 'pending_payment' })) },
     });
-    const svc = new SidePoolService(prisma);
+    const svc = new SidePoolService(prisma, buildRanking());
     await expect(svc.invite('me', 'pool-1', 'target')).rejects.toThrow(BadRequestException);
   });
 
@@ -75,7 +80,7 @@ describe('SidePoolService — convites', () => {
         create: jest.fn(),
       },
     });
-    const svc = new SidePoolService(prisma);
+    const svc = new SidePoolService(prisma, buildRanking());
     await expect(svc.invite('me', 'pool-1', 'target')).rejects.toThrow(ConflictException);
   });
 
@@ -97,7 +102,7 @@ describe('SidePoolService — convites', () => {
         delete: jest.fn(),
       },
     });
-    const svc = new SidePoolService(prisma);
+    const svc = new SidePoolService(prisma, buildRanking());
     const res = await svc.invite('me', 'pool-1', 'target');
     expect(res).toEqual({ inviteId: 'invite-9' });
     expect(upsert).toHaveBeenCalledTimes(1);
@@ -129,7 +134,7 @@ describe('SidePoolService — convites', () => {
         findMany: jest.fn(async () => [{ id: 'inv-1', sidePoolId: 'p-invited' }]),
       },
     });
-    const svc = new SidePoolService(prisma);
+    const svc = new SidePoolService(prisma, buildRanking());
     const res = await svc.listInvitable('viewer', 'target');
     const byId = new Map(res.map((r) => [r.sidePoolId, r]));
     expect(byId.get('p-member')?.state).toBe('member');
@@ -139,7 +144,7 @@ describe('SidePoolService — convites', () => {
   });
 
   it('listInvitable vazio quando viewer === target', async () => {
-    const svc = new SidePoolService(buildPrisma());
+    const svc = new SidePoolService(buildPrisma(), buildRanking());
     expect(await svc.listInvitable('me', 'me')).toEqual([]);
   });
 });
