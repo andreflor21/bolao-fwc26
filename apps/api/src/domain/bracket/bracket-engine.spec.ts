@@ -329,4 +329,34 @@ describe('assignThirdsToSlots', () => {
     const result = assignThirdsToSlots(slots, [third('A', 'A3')]);
     expect(result.size).toBe(0);
   });
+
+  it('follows the Annex C table for the full 8-third set (not arbitrary matching)', () => {
+    // Combination EFGHIJKL (Annex C Option 1). The bottom slot of each of the
+    // 8 winner fixtures is a best-third slot; ids match the real engine.
+    const slots = [
+      { id: 'R32-74:bottom', allowedGroups: ['A', 'B', 'C', 'D', 'F'] as GroupLetter[] },
+      { id: 'R32-77:bottom', allowedGroups: ['C', 'D', 'F', 'G', 'H'] as GroupLetter[] },
+      { id: 'R32-79:bottom', allowedGroups: ['C', 'E', 'F', 'H', 'I'] as GroupLetter[] },
+      { id: 'R32-80:bottom', allowedGroups: ['E', 'H', 'I', 'J', 'K'] as GroupLetter[] },
+      { id: 'R32-81:bottom', allowedGroups: ['B', 'E', 'F', 'I', 'J'] as GroupLetter[] },
+      { id: 'R32-82:bottom', allowedGroups: ['A', 'E', 'H', 'I', 'J'] as GroupLetter[] },
+      { id: 'R32-85:bottom', allowedGroups: ['E', 'F', 'G', 'I', 'J'] as GroupLetter[] },
+      { id: 'R32-87:bottom', allowedGroups: ['D', 'E', 'I', 'J', 'L'] as GroupLetter[] },
+    ];
+    const thirds = (['E', 'F', 'G', 'H', 'I', 'J', 'K', 'L'] as GroupLetter[]).map((g) =>
+      third(g, `${g}3`),
+    );
+    const result = assignThirdsToSlots(slots, thirds);
+
+    // Regulation-correct allocation (winner group -> third group):
+    // E->F, I->G, A->E, L->K, D->I, G->H, B->J, K->L.
+    expect(result.get('R32-74:bottom')).toBe('F3'); // 1E faces 3F
+    expect(result.get('R32-77:bottom')).toBe('G3'); // 1I faces 3G
+    expect(result.get('R32-79:bottom')).toBe('E3'); // 1A faces 3E
+    expect(result.get('R32-80:bottom')).toBe('K3'); // 1L faces 3K
+    expect(result.get('R32-81:bottom')).toBe('I3'); // 1D faces 3I
+    expect(result.get('R32-82:bottom')).toBe('H3'); // 1G faces 3H
+    expect(result.get('R32-85:bottom')).toBe('J3'); // 1B faces 3J
+    expect(result.get('R32-87:bottom')).toBe('L3'); // 1K faces 3L
+  });
 });

@@ -14,6 +14,10 @@ import {
   type FixtureTemplate,
   type SlotRef,
 } from './fifa-2026-bracket-map';
+import {
+  ANNEX_C_THIRD_PLACE,
+  ANNEX_C_FIXTURE_BY_WINNER,
+} from './annex-c-third-place';
 import type { FifaRanks, GroupMatchResult, GroupStanding } from './types';
 
 export interface BracketEngineInput {
@@ -74,15 +78,17 @@ function deriveWinnerFromScore(
 }
 
 /**
- * Assigns each of the 8 advancing thirds to exactly one BEST_THIRD_FROM
- * R32 slot, respecting per-slot allowed-groups constraints. Uses
- * backtracking — fast for n=8 (worst case 8! × 8 = 322k ops).
+ * Bipartite matching of thirds to slots respecting per-slot allowed-groups,
+ * returning the FIRST valid assignment found via backtracking. The
+ * allowed-groups constraints alone DO NOT determine a unique matching (in all
+ * 495 FIFA combinations there is more than one valid matching), so this is
+ * order-dependent and NOT regulation-correct on its own. Kept only as a
+ * defensive fallback for the (impossible-by-design) case where the qualifying
+ * set of thirds is not one of the 495 Annex C combinations.
  *
- * Returns a map slotId → teamCode. If no valid bipartite matching exists
- * (impossible under FIFA design but defensive nonetheless), falls back to
- * a greedy assignment ignoring constraints.
+ * Returns slotId → teamCode, or an empty map if no valid matching exists.
  */
-export function assignThirdsToSlots(
+function assignThirdsByMatching(
   slots: Array<{ id: string; allowedGroups: GroupLetter[] }>,
   thirds: ThirdPlaceSlot[],
 ): Map<string, string> {
@@ -111,8 +117,72 @@ export function assignThirdsToSlots(
     for (let i = 0; i < slots.length; i++) {
       result.set(slots[i]!.id, thirds[assignment[i]!]!.teamCode);
     }
-    return result;
   }
+  return result;
+}
+
+/**
+ * Assigns each of the 8 advancing thirds to exactly one BEST_THIRD_FROM R32
+ * slot following the OFFICIAL FIFA 2026 Annex C allocation table.
+ *
+ * The set of 8 qualifying thirds (their group letters, sorted) is the key into
+ * {@link ANNEX_C_THIRD_PLACE}; that table fixes, for each group-winner fixture,
+ * exactly which third group it faces. This is the regulation-correct rule — the
+ * per-slot `allowedGroups` only bound the candidates and leave the matching
+ * ambiguous, so they must NOT be used to pick the pairing.
+ *
+ * Slot ids are `${fixtureId}:top|:bottom`; only the fixture id is used to find
+ * the winner group (all 8 best-third slots are the bottom of a winner fixture).
+ *
+ * Returns a map slotId → teamCode. Falls back to {@link assignThirdsByMatching}
+ * only if the qualifying set is not a known Annex C combination (defensive;
+ * impossible under valid group standings), and to a constraint-free assignment
+ * if even that fails.
+ */
+export function assignThirdsToSlots(
+  slots: Array<{ id: string; allowedGroups: GroupLetter[] }>,
+  thirds: ThirdPlaceSlot[],
+): Map<string, string> {
+  const result = new Map<string, string>();
+  if (thirds.length < slots.length) return result;
+
+  // Annex C is defined for exactly the 8 qualifying thirds.
+  if (thirds.length === 8) {
+    const comboKey = thirds
+      .map((t) => t.groupLetter)
+      .sort()
+      .join('');
+    const allocation = ANNEX_C_THIRD_PLACE[comboKey];
+    if (allocation) {
+      const teamByGroup = new Map<GroupLetter, string>();
+      for (const third of thirds) teamByGroup.set(third.groupLetter, third.teamCode);
+
+      // winner group -> fixture id; invert to resolve each slot's fixture.
+      const winnerByFixture = new Map<string, GroupLetter>();
+      for (const [winner, fixtureId] of Object.entries(ANNEX_C_FIXTURE_BY_WINNER)) {
+        winnerByFixture.set(fixtureId, winner as GroupLetter);
+      }
+
+      let complete = true;
+      for (const slot of slots) {
+        const fixtureId = slot.id.split(':')[0]!;
+        const winnerGroup = winnerByFixture.get(fixtureId);
+        const thirdGroup = winnerGroup ? allocation[winnerGroup] : undefined;
+        const teamCode = thirdGroup ? teamByGroup.get(thirdGroup) : undefined;
+        if (!teamCode) {
+          complete = false;
+          break;
+        }
+        result.set(slot.id, teamCode);
+      }
+      if (complete) return result;
+      result.clear();
+    }
+  }
+
+  // Defensive fallback: the qualifying set is not a known Annex C combination.
+  const matched = assignThirdsByMatching(slots, thirds);
+  if (matched.size === slots.length) return matched;
 
   for (let i = 0; i < slots.length; i++) {
     result.set(slots[i]!.id, thirds[i]!.teamCode);
