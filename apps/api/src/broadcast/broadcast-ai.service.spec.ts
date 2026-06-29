@@ -39,6 +39,37 @@ describe('BroadcastAIService', () => {
     expect(result.text).toContain('1x0');
   });
 
+  it('template de mata-mata mostra acertos do confronto + placares cravados', async () => {
+    const svc = new BroadcastAIService(configWith({}));
+    const result = await svc.generate('top-guesses-knockout', {
+      homeTeamName: 'Brasil',
+      awayTeamName: 'Japão',
+      kickoffLabel: 'sáb., 14:00',
+      confrontoCount: 16,
+      guesses: [
+        { homeGoals: 1, awayGoals: 0, count: 10 },
+        { homeGoals: 2, awayGoals: 0, count: 5 },
+        { homeGoals: 1, awayGoals: 2, count: 1 },
+      ],
+    });
+    expect(result.source).toBe('template');
+    expect(result.text).toContain('Brasil x Japão');
+    expect(result.text).toContain('16 jogadores acertaram o confronto');
+    expect(result.text).toContain('1 x 0 — 10 pessoas');
+    expect(result.text).toContain('1 x 2 — 1 pessoa');
+  });
+
+  it('template de mata-mata avisa quando ninguém cravou o confronto', async () => {
+    const svc = new BroadcastAIService(configWith({}));
+    const result = await svc.generate('top-guesses-knockout', {
+      homeTeamName: 'Brasil',
+      awayTeamName: 'Japão',
+      confrontoCount: 0,
+      guesses: [],
+    });
+    expect(result.text).toMatch(/Ninguém cravou/i);
+  });
+
   it('template de "quem está cravando" lista os nomes do contexto', async () => {
     const svc = new BroadcastAIService(configWith({}));
     const result = await svc.generate('who-is-nailing', {

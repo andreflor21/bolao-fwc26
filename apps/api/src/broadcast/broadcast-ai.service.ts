@@ -4,6 +4,7 @@ import Anthropic from '@anthropic-ai/sdk';
 
 export type BroadcastPresetKey =
   | 'top-guesses-today'
+  | 'top-guesses-knockout'
   | 'win-draw-probabilities'
   | 'match-result-recap'
   | 'reminder-lock-soon'
@@ -33,6 +34,12 @@ Dados (JSON):
 ${JSON.stringify(ctx, null, 2)}
 
 Escreva avisando qual é o confronto e listando TODOS os placares que foram palpitados, do mais escolhido pro menos, com quantas pessoas em cada um (o array vem em "guesses"). Pode usar uma linha por placar tipo "2x1 — 5 pessoas". Fecha com um gancho pro jogo. Mantém curto e natural.`,
+
+  'top-guesses-knockout': (ctx) => `Os palpites do grupo pro próximo jogo do mata-mata.
+Dados (JSON):
+${JSON.stringify(ctx, null, 2)}
+
+Escreva avisando o confronto e o horário ("kickoffLabel", BRT). Diz quantas pessoas acertaram o confronto (campo "confrontoCount"). Depois lista os placares que ESSA galera cravou, do mais escolhido pro menos, com quantas pessoas em cada um (array "guesses"), uma linha por placar tipo "2x1 — 5 pessoas". Se ninguém acertou o confronto (confrontoCount 0), comenta de leve e não inventa placar. Mantém curto e natural.`,
 
   'win-draw-probabilities': (ctx) => `Como o grupo dividiu os palpites desse jogo (em %).
 Dados (JSON):
@@ -117,6 +124,24 @@ export class BroadcastAIService {
       const all = Array.isArray(c.guesses) ? (c.guesses as Array<{ homeGoals: number; awayGoals: number; count: number }>) : [];
       const lines = all.map((g) => `${g.homeGoals}x${g.awayGoals} — ${g.count} ${g.count === 1 ? 'pessoa' : 'pessoas'}`);
       return `Como o grupo palpitou ${home} x ${away}:\n${lines.join('\n') || 'Ninguém palpitou ainda.'}`;
+    }
+    if (presetKey === 'top-guesses-knockout') {
+      const home = String(c.homeTeamName ?? c.homeTeamCode ?? '?');
+      const away = String(c.awayTeamName ?? c.awayTeamCode ?? '?');
+      const kickoff = c.kickoffLabel ? String(c.kickoffLabel) : '';
+      const confronto = Number(c.confrontoCount ?? 0);
+      const all = Array.isArray(c.guesses)
+        ? (c.guesses as Array<{ homeGoals: number; awayGoals: number; count: number }>)
+        : [];
+      const head = `${home} x ${away}${kickoff ? ` — ${kickoff}` : ''}`;
+      if (confronto === 0) {
+        return `${head}\nNinguém cravou esse confronto no chaveamento.`;
+      }
+      const acertaram = `${confronto} ${confronto === 1 ? 'jogador acertou' : 'jogadores acertaram'} o confronto`;
+      const lines = all.map(
+        (g) => `${g.homeGoals} x ${g.awayGoals} — ${g.count} ${g.count === 1 ? 'pessoa' : 'pessoas'}`,
+      );
+      return `${head}\n${acertaram}${lines.length ? `\n\n${lines.join('\n')}` : ''}`;
     }
     if (presetKey === 'win-draw-probabilities') {
       const home = String(c.homeTeamName ?? c.homeTeamCode ?? 'Casa');

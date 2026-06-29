@@ -8,6 +8,7 @@ import type { MatchDto } from '@bolao/shared';
 
 type PresetKey =
   | 'top-guesses-today'
+  | 'top-guesses-knockout'
   | 'win-draw-probabilities'
   | 'match-result-recap'
   | 'reminder-lock-soon'
@@ -23,6 +24,35 @@ interface PresetMeta {
   needsScore?: boolean;
   /** Filtra os jogos elegíveis no select de matchId. */
   matchFilter: 'upcoming' | 'finished' | 'live' | 'any';
+  /** De onde vêm os jogos do select: fase de grupos ou mata-mata. */
+  source?: 'group' | 'knockout';
+}
+
+/** Confronto do mata-mata (espelha /admin/knockout/fixtures). */
+interface KnockoutFixture {
+  matchId: string;
+  fixtureId: string | null;
+  kickoffAt: string;
+  homeTeamCode: string | null;
+  homeTeamName: string | null;
+  awayTeamCode: string | null;
+  awayTeamName: string | null;
+  homeGoals: number | null;
+  awayGoals: number | null;
+  hasResult: boolean;
+  teamsResolved: boolean;
+}
+
+/** Shape mínimo que o select usa, seja jogo de grupo ou de mata-mata. */
+interface SelectableMatch {
+  id: string;
+  kickoffAt: string;
+  homeTeamName: string | null;
+  homeTeamCode: string | null;
+  awayTeamName: string | null;
+  awayTeamCode: string | null;
+  homeGoalsOfficial: number | null;
+  awayGoalsOfficial: number | null;
 }
 
 const PRESETS: PresetMeta[] = [
@@ -33,6 +63,16 @@ const PRESETS: PresetMeta[] = [
     description: 'Lista os 3–5 placares mais palpitados pelo grupo para o jogo escolhido.',
     needsMatch: true,
     matchFilter: 'upcoming',
+    source: 'group',
+  },
+  {
+    key: 'top-guesses-knockout',
+    emoji: '🏟️',
+    label: 'Palpites mais jogados (mata-mata)',
+    description: 'Mostra quantos cravaram o confronto do mata-mata e os placares mais palpitados por essa galera.',
+    needsMatch: true,
+    matchFilter: 'upcoming',
+    source: 'knockout',
   },
   {
     key: 'win-draw-probabilities',
@@ -123,9 +163,37 @@ export function AdminBroadcast() {
     queryFn: () => api<MatchDto[]>('/matches/group-stage'),
   });
 
-  const filteredMatches = useMemo(() => {
-    const all = matchesQuery.data ?? [];
+  const knockoutQuery = useQuery({
+    queryKey: ['admin-knockout-fixtures'],
+    queryFn: () => api<KnockoutFixture[]>('/admin/knockout/fixtures'),
+    enabled: preset.source === 'knockout',
+  });
+
+  const filteredMatches = useMemo<SelectableMatch[]>(() => {
     const now = new Date();
+    // Mata-mata: jogos vêm do bracket oficial e só valem com os times definidos.
+    if (preset.source === 'knockout') {
+      const GRACE_MS = 45 * 60 * 1000;
+      return (knockoutQuery.data ?? [])
+        .filter(
+          (f) =>
+            f.teamsResolved &&
+            !f.hasResult &&
+            new Date(f.kickoffAt).getTime() + GRACE_MS >= now.getTime(),
+        )
+        .map((f) => ({
+          id: f.matchId,
+          kickoffAt: f.kickoffAt,
+          homeTeamName: f.homeTeamName,
+          homeTeamCode: f.homeTeamCode,
+          awayTeamName: f.awayTeamName,
+          awayTeamCode: f.awayTeamCode,
+          homeGoalsOfficial: f.homeGoals,
+          awayGoalsOfficial: f.awayGoals,
+        }))
+        .slice(0, 30);
+    }
+    const all = matchesQuery.data ?? [];
     if (preset.matchFilter === 'upcoming') {
       // Mantém o jogo selecionável até 45 min após o kickoff (jogo em
       // andamento ainda vale como "próximo" pra esses presets).
@@ -148,7 +216,7 @@ export function AdminBroadcast() {
         .slice(-30);
     }
     return all;
-  }, [matchesQuery.data, preset.matchFilter]);
+  }, [matchesQuery.data, knockoutQuery.data, preset.matchFilter, preset.source]);
 
   const previewMutation = useMutation({
     mutationFn: () =>

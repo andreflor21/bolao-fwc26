@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AdminMatchService } from '../admin/admin-match.service';
+import { KnockoutService } from '../admin/knockout.service';
 import { BroadcastAIService, BroadcastDraft, BroadcastPresetKey } from './broadcast-ai.service';
 import { WhatsappService } from './whatsapp.service';
 import { FIFA_WC_2026_ID } from '@bolao/shared';
@@ -58,6 +59,7 @@ export class BroadcastService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly adminMatch: AdminMatchService,
+    private readonly knockout: KnockoutService,
     private readonly ai: BroadcastAIService,
     private readonly whatsapp: WhatsappService,
   ) {}
@@ -150,6 +152,8 @@ export class BroadcastService {
     switch (presetKey) {
       case 'top-guesses-today':
         return this.collectTopGuesses(matchId);
+      case 'top-guesses-knockout':
+        return this.collectTopKnockoutGuesses(matchId);
       case 'win-draw-probabilities':
         return this.collectProbabilities(matchId);
       case 'match-result-recap':
@@ -209,6 +213,83 @@ export class BroadcastService {
       totalGuesses: total,
       // Todos os placares palpitados, do mais escolhido pro menos (não só o top 5).
       guesses: distribution,
+    };
+  }
+
+  /**
+   * Resolve o confronto-alvo do mata-mata: matchId explícito > próximo jogo de
+   * KO com times já definidos e sem resultado oficial. Diferente de
+   * {@link resolveTargetMatch}, traz `bracketFixtureId`/`stage` e exige que os
+   * dois times estejam resolvidos (senão não dá pra cruzar com os palpites).
+   */
+  private async resolveTargetKnockoutMatch(matchId?: string) {
+    const select = {
+      id: true,
+      stage: true,
+      bracketFixtureId: true,
+      kickoffAt: true,
+      homeTeam: { select: { code: true, name: true } },
+      awayTeam: { select: { code: true, name: true } },
+    } as const;
+    let match;
+    if (matchId) {
+      match = await this.prisma.match.findUnique({ where: { id: matchId }, select });
+      if (!match) throw new NotFoundException(`Jogo ${matchId} não encontrado`);
+      if (match.stage === 'group') {
+        throw new BadRequestException('Esse preset é só para jogos do mata-mata.');
+      }
+    } else {
+      match = await this.prisma.match.findFirst({
+        where: {
+          competitionId: FIFA_WC_2026_ID,
+          stage: { not: 'group' },
+          kickoffAt: { gte: new Date() },
+          homeGoalsOfficial: null,
+          homeTeamId: { not: null },
+          awayTeamId: { not: null },
+        },
+        orderBy: { kickoffAt: 'asc' },
+        select,
+      });
+      if (!match) throw new NotFoundException('Nenhum jogo futuro do mata-mata com times definidos.');
+    }
+    if (!match.bracketFixtureId) {
+      throw new BadRequestException('Confronto do mata-mata sem bracketFixtureId.');
+    }
+    if (!match.homeTeam?.code || !match.awayTeam?.code) {
+      throw new BadRequestException('Os times deste confronto ainda não foram definidos.');
+    }
+    return match;
+  }
+
+  /**
+   * "Palpites mais jogados (mata-mata)" — quantos cravaram o confronto oficial
+   * e como ficou a distribuição dos placares cravados por essa galera. Os
+   * palpites de KO vivem no JSON de `BracketPrediction`, então delegamos a
+   * agregação pro {@link KnockoutService}.
+   */
+  private async collectTopKnockoutGuesses(matchId?: string) {
+    const match = await this.resolveTargetKnockoutMatch(matchId);
+    const { confrontoCount, guesses } = await this.knockout.bracketScoreDistribution(
+      match.bracketFixtureId!,
+      match.homeTeam!.code!,
+      match.awayTeam!.code!,
+    );
+    const total = guesses.reduce((s, g) => s + g.count, 0);
+    return {
+      matchId: match.id,
+      fixtureId: match.bracketFixtureId,
+      stage: match.stage,
+      homeTeamCode: match.homeTeam?.code ?? null,
+      awayTeamCode: match.awayTeam?.code ?? null,
+      homeTeamName: match.homeTeam?.name ?? null,
+      awayTeamName: match.awayTeam?.name ?? null,
+      kickoffLabel: BRT_DATETIME.format(match.kickoffAt),
+      // Quantos acertaram o confronto exato (top/bottom no slot certo).
+      confrontoCount,
+      totalGuesses: total,
+      // Placares cravados por quem acertou o confronto, do mais escolhido pro menos.
+      guesses,
     };
   }
 

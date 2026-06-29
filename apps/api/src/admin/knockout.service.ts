@@ -423,6 +423,52 @@ export class KnockoutService {
     return this.recomputeOfficialBracket();
   }
 
+  /**
+   * Distribuição dos palpites do grupo para UM confronto do mata-mata. Como os
+   * palpites de KO ficam no JSON de cada `BracketPrediction` (e não na tabela
+   * `Guess`), agregamos em memória:
+   *  - `confrontoCount`: quantos cravaram o confronto exato (top/bottom no slot
+   *    certo — mesmo critério de pontuação do {@link scoreKnockoutGuess});
+   *  - `guesses`: distribuição dos placares cravados por essa galera, do mais
+   *    jogado pro menos. Como eles acertaram a orientação oficial, o `homeGoals`
+   *    do palpite já corresponde ao time mandante (top) oficial.
+   *
+   * Usado no broadcast "palpites mais jogados (mata-mata)".
+   */
+  async bracketScoreDistribution(
+    fixtureId: string,
+    officialTopCode: string,
+    officialBottomCode: string,
+  ): Promise<{
+    confrontoCount: number;
+    guesses: Array<{ homeGoals: number; awayGoals: number; count: number }>;
+  }> {
+    const predictions = await this.prisma.bracketPrediction.findMany({
+      where: { competitionId: FIFA_WC_2026_ID },
+      select: { payload: true },
+    });
+    let confrontoCount = 0;
+    const scoreByKey = new Map<string, { homeGoals: number; awayGoals: number; count: number }>();
+    for (const p of predictions) {
+      const payload = (p.payload ?? {}) as StoredPayload;
+      const predFixture = payload.bracket?.fixtures?.find((f) => f.id === fixtureId);
+      if (!predFixture) continue;
+      const hitConfronto =
+        predFixture.topTeamCode === officialTopCode &&
+        predFixture.bottomTeamCode === officialBottomCode;
+      if (!hitConfronto) continue;
+      confrontoCount += 1;
+      const score = payload.knockoutScores?.[fixtureId];
+      if (!score) continue;
+      const key = `${score.homeGoals}x${score.awayGoals}`;
+      const cur = scoreByKey.get(key);
+      if (cur) cur.count += 1;
+      else scoreByKey.set(key, { homeGoals: score.homeGoals, awayGoals: score.awayGoals, count: 1 });
+    }
+    const guesses = [...scoreByKey.values()].sort((a, b) => b.count - a.count);
+    return { confrontoCount, guesses };
+  }
+
   /** True quando os 72 resultados de grupo estão lançados. */
   async isGroupStageComplete(): Promise<boolean> {
     const withResult = await this.prisma.match.count({

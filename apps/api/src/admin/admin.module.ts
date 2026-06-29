@@ -23,6 +23,6 @@ import { PrizeModule } from '../prize/prize.module';
     KnockoutController,
   ],
   providers: [AdminMatchService, AdminClosureService, AdminPixService, KnockoutService],
-  exports: [AdminMatchService, AdminClosureService],
+  exports: [AdminMatchService, AdminClosureService, KnockoutService],
 })
 export class AdminModule {}

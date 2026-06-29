@@ -3,6 +3,7 @@ import type { BroadcastPresetKey } from '../broadcast-ai.service';
 
 const PRESET_KEYS = [
   'top-guesses-today',
+  'top-guesses-knockout',
   'win-draw-probabilities',
   'match-result-recap',
   'reminder-lock-soon',
