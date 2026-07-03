@@ -156,6 +156,20 @@ export function Landing() {
               e o bônus de placar não entra.
             </p>
           </div>
+
+          <div className="mt-3 rounded-xl border border-emerald-500/15 bg-emerald-900/20 px-4 py-3">
+            <p className="text-xs text-emerald-100/70 leading-relaxed">
+              <strong className="text-emerald-200">Times certos, mas no jogo errado, também não pontua.</strong> Cada
+              confronto tem um número fixo no chaveamento — a comparação é feita jogo a jogo. Ex.: no resultado real,{' '}
+              <strong className="text-gold-200">Colômbia (1º) × Gana (3º)</strong> é um jogo e{' '}
+              <strong className="text-gold-200">Portugal (2º) × Croácia (2º)</strong> é outro. No seu palpite você
+              acertou as quatro seleções, mas trocou os confrontos:{' '}
+              <strong className="text-gold-200">Portugal (1º) × Croácia (3º)</strong> e{' '}
+              <strong className="text-gold-200">Colômbia (2º) × Gana (2º)</strong>. Como as posições de grupo ficaram
+              diferentes, as seleções caíram em jogos diferentes dos oficiais — o chaveamento está errado e nenhum dos
+              confrontos pontua.
+            </p>
+          </div>
         </div>
       </section>
     </div>
