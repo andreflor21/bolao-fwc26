@@ -98,11 +98,14 @@ export function Landing() {
 
       {/* SCORING */}
       <section className="card-glow">
-        <div className="flex items-center justify-between flex-wrap gap-3 mb-6">
-          <div>
-            <p className="text-xs font-bold tracking-[0.4em] text-gold-400">REGULAMENTO</p>
-            <h2 className="mt-1 font-display text-3xl tracking-wider text-white">COMO PONTUA</h2>
-          </div>
+        <div className="mb-6">
+          <p className="text-xs font-bold tracking-[0.4em] text-gold-400">REGULAMENTO</p>
+          <h2 className="mt-1 font-display text-3xl tracking-wider text-white">COMO PONTUA</h2>
+        </div>
+
+        {/* Fase de grupos */}
+        <div className="flex items-center justify-between flex-wrap gap-3 mb-3">
+          <p className="text-xs font-bold tracking-[0.3em] text-emerald-300/80">FASE DE GRUPOS</p>
           <span className="chip">Pontuações não somam entre si</span>
         </div>
 
@@ -115,9 +118,45 @@ export function Landing() {
           <ScoreRow points="0" label="Errou tudo" muted />
         </div>
 
-        <p className="mt-6 text-xs text-emerald-200/60 border-t border-emerald-500/10 pt-4">
-          ⚽ Regra: cada jogo dá no máximo uma pontuação (a maior aplicável). Pontuações não somam entre si.
+        <p className="mt-4 text-xs text-emerald-200/60">
+          ⚽ Cada jogo dá no máximo uma pontuação (a maior aplicável). Pontuações não somam entre si.
         </p>
+
+        {/* Mata-mata */}
+        <div className="mt-8 border-t border-emerald-500/10 pt-6">
+          <div className="flex items-center justify-between flex-wrap gap-3 mb-3">
+            <p className="text-xs font-bold tracking-[0.3em] text-gold-300/80">MATA-MATA</p>
+            <span className="chip">Até 40 pontos por jogo</span>
+          </div>
+
+          <p className="mb-4 text-sm text-emerald-100/75 leading-relaxed">
+            No mata-mata você também palpita <strong className="text-gold-200">quais seleções avançam</strong> para
+            cada confronto. Aqui os pontos <strong className="text-gold-200">somam</strong>: acerto das seleções +
+            bônus de placar.
+          </p>
+
+          <div className="grid sm:grid-cols-2 gap-3">
+            <ScoreRow points="+15" label="Cada seleção certa no lado correto — até +30" />
+            <ScoreRow points="+10" label="Bônus de placar exato — só com as 2 seleções certas" highlight />
+          </div>
+
+          <p className="mt-4 text-xs text-emerald-200/60">
+            🏆 O bônus de placar segue a mesma escala da fase de grupos (10/8/6/4/2) e só conta quando você acerta as
+            duas seleções do confronto. Máximo por jogo: 15 + 15 + 10 ={' '}
+            <strong className="text-gold-200">40 pontos</strong>.
+          </p>
+
+          <div className="mt-3 rounded-xl border border-emerald-500/15 bg-emerald-900/20 px-4 py-3">
+            <p className="text-xs text-emerald-100/70 leading-relaxed">
+              <strong className="text-emerald-200">Por que o placar não conta acertando só uma seleção?</strong>{' '}
+              Porque o placar vale para um confronto específico. Ex.: você palpitou{' '}
+              <strong className="text-gold-200">Inglaterra 2 × 1 Gana</strong>, mas o jogo real foi{' '}
+              <strong className="text-gold-200">Inglaterra 2 × 1 Congo</strong>. Mesmo o 2×1 batendo, esse placar era
+              de outro confronto — então você leva só os <strong className="text-gold-200">+15</strong> da Inglaterra
+              e o bônus de placar não entra.
+            </p>
+          </div>
+        </div>
       </section>
     </div>
   );
